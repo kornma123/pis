@@ -915,8 +915,7 @@ function parseOwnerLease(body) {
   const line = block.match(/-\s*\*\*owner lease\*\*\s*[:：]\s*(.+)\s*$/im)?.[1]?.trim();
   const raw = line?.replace(/^`([\s\S]*)`$/u, '$1');
   if (!raw) {
-    return { ownerId, leaseState: /^unassigned$/i.test(ownerId) ? 'unassigned' : 'active',
-      candidatePr: null, version: 0, nextTrigger: 'legacy-migration', legacy: true };
+    return { ownerId, leaseState: /^unassigned$/i.test(ownerId) ? 'unassigned' : 'active', candidatePr: null, version: 0, nextTrigger: 'legacy-migration', legacy: true };
   }
   let parsed;
   try { parsed = JSON.parse(raw); } catch { throw new Error('owner lease JSON 无效。'); }
@@ -928,21 +927,15 @@ function parseOwnerLease(body) {
     !Number.isInteger(parsed.version) || parsed.version < 0 ||
     (parsed.candidate_pr != null && (!Number.isInteger(parsed.candidate_pr) || parsed.candidate_pr <= 0)) ||
     !String(parsed.next_trigger || '').trim() || ((ownerId === 'unassigned') !== (parsed.lease_state === 'unassigned'))
-  ) {
-    throw new Error('owner lease 与 current owner、状态、candidate 或 version 不一致。');
-  }
-  return { ownerId, leaseState: parsed.lease_state, candidatePr: parsed.candidate_pr,
-    version: parsed.version, nextTrigger: parsed.next_trigger, legacy: false };
+  ) throw new Error('owner lease 与 current owner、状态、candidate 或 version 不一致。');
+  return { ownerId, leaseState: parsed.lease_state, candidatePr: parsed.candidate_pr, version: parsed.version, nextTrigger: parsed.next_trigger, legacy: false };
 }
 
 function replaceOwnerLease(body, lease) {
   const line = `- **owner lease**: \`${JSON.stringify({ owner_id: lease.ownerId,
     lease_state: lease.leaseState, candidate_pr: lease.candidatePr,
     version: lease.version, next_trigger: lease.nextTrigger })}\``;
-  let next = String(body).replace(
-    /(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i,
-    `$1${lease.ownerId}`,
-  );
+  let next = String(body).replace(/(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i, `$1${lease.ownerId}`);
   next = /-\s*\*\*owner lease\*\*\s*[:：]/i.test(next)
     ? next.replace(/-\s*\*\*owner lease\*\*\s*[:：].+/i, line)
     : next.replace(/<!--\s*coreone-owner:end\s*-->/i, `${line}\n<!-- coreone-owner:end -->`);
@@ -1472,8 +1465,8 @@ function commandStart(argv) {
   if (flags.owned.length === 0) throw new Error('至少提供一个 --owned=<path/glob>。');
   flags.owned = normalizeTaskOwnedScope(flags.owned);
   const initialTask = inspectTaskState(root);
-  const recoveryState = initialTask.kind === 'valid' &&
-    initialTask.state.ownerSaga?.kind === 'claim' &&
+  const recoveryState = initialTask.kind === 'valid' && initialTask.state.issue === issue &&
+    initialTask.state.owner === owner && initialTask.state.ownerSaga?.kind === 'claim' &&
     ['in-progress', 'RECOVERY_REQUIRED'].includes(initialTask.state.ownerSaga.reconcile)
     ? initialTask.state : null;
   if (initialTask.kind === 'valid' && !recoveryState) {
@@ -1504,6 +1497,7 @@ function commandStart(argv) {
   const wantsClaim = String(flags.claim || '').toLowerCase() === 'true';
   const expectedVersion = Number(flags['owner-version']);
   const candidatePr = flags['candidate-pr'] == null ? null : Number(flags['candidate-pr']);
+  const actor = wantsClaim ? currentGitHubActor(root) : null;
   if (wantsClaim && (!Number.isInteger(expectedVersion) || expectedVersion < 0)) {
     throw new Error('--claim=true 必须提供 --owner-version=<expected integer>。');
   }
@@ -1512,8 +1506,8 @@ function commandStart(argv) {
   }
   const canClaim = wantsClaim && issueLease.ownerId === 'unassigned' &&
     issueLease.leaseState === 'unassigned' && issueLease.version === expectedVersion;
-  const resumeClaim = wantsClaim && issueLease.ownerId === owner &&
-    issueLease.leaseState === 'active' && issueLease.version === expectedVersion + 1;
+  const resumeClaim = wantsClaim && issueLease.ownerId === owner && issueLease.leaseState === 'active' &&
+    issueLease.version === expectedVersion + 1 && issueLease.nextTrigger === `handoff-required@${actor}`;
   if (wantsClaim && !canClaim && !resumeClaim) {
     throw new Error(`Issue #${issue} owner/version 已漂移；expected=unassigned@${expectedVersion}。`);
   }
@@ -1586,19 +1580,18 @@ function commandStart(argv) {
   const preflight = run(process.execPath, preflightArgs, { cwd: root, timeout: 240_000 });
 
   let activeLease = issueLease;
-  let ownerSaga = recoveryState?.ownerSaga || null;
+  let ownerSaga = recoveryState?.ownerSaga || null, claimError;
   if (wantsClaim) {
     const identity = repoIdentity(root);
-    const actor = currentGitHubActor(root);
+    if (recoveryState && (ownerSaga.actor !== actor || ownerSaga.expected?.repository !== identity.nameWithOwner || ownerSaga.expected?.issue !== issue ||
+        ownerSaga.expected?.owner !== 'unassigned' || ownerSaga.expected?.version !== expectedVersion || ownerSaga.expected?.candidatePr !== candidatePr)) throw new Error('本地 claim recovery state 与 repo/Issue/actor/version/candidate 不一致。');
     const receipt = JSON.parse(run(process.execPath, [
       path.join(root, 'scripts', 'github-live-fact-receipt.cjs'),
       `--repo=${identity.nameWithOwner}`, '--decision=claim', '--target=master', `--issue=${issue}`,
     ], { cwd: root, timeout: 60_000 }).stdout);
-    if (receipt.verdict !== 'PASS' || receipt.object?.number !== issue || receipt.object?.updatedAt !== issueData.updatedAt) {
-      throw new Error('GOV-007 claim receipt 与当前 Issue snapshot 不一致。');
-    }
-    activeLease = resumeClaim ? issueLease : { ownerId: owner, leaseState: 'active',
-      candidatePr, version: expectedVersion + 1, nextTrigger: 'handoff-required', legacy: false };
+    if (receipt.verdict !== 'PASS' || receipt.object?.number !== issue || receipt.object?.updatedAt !== issueData.updatedAt) throw new Error('GOV-007 claim receipt 与当前 Issue snapshot 不一致。');
+    activeLease = resumeClaim ? issueLease : { ownerId: owner, leaseState: 'active', candidatePr,
+      version: expectedVersion + 1, nextTrigger: `handoff-required@${actor}`, legacy: false };
     if (resumeClaim && activeLease.candidatePr !== candidatePr) throw new Error('candidate PR 已漂移。');
     const runId = sha256(`${identity.nameWithOwner}:${issue}:${owner}:${activeLease.version}:${candidatePr ?? 'none'}`).slice(0, 16);
     ownerSaga = { kind: 'claim', runId, reconcile: 'in-progress', actor,
@@ -1613,13 +1606,11 @@ function commandStart(argv) {
           if (currentGitHubActor(root) !== actor || sha256(live.body) !== ownerSaga.expected.bodyHash ||
               live.updatedAt !== ownerSaga.expected.updatedAt) throw new Error('owner lease CAS snapshot 已漂移。');
         } });
+      ownerSaga.steps.body = true;
       const claimed = JSON.parse(run('gh', ['issue', 'view', String(issue), '--json',
         'number,state,body,url,title,labels,updatedAt'], { cwd: root }).stdout);
-      if (claimed.state !== 'OPEN' || JSON.stringify(parseOwnerLease(claimed.body)) !== JSON.stringify(activeLease)) {
-        throw new Error(`Issue #${issue} owner lease 写后回读不一致。`);
-      }
-      Object.assign(issueData, claimed);
-      ownerSaga.steps.body = true;
+      if (claimed.state !== 'OPEN' || JSON.stringify(parseOwnerLease(claimed.body)) !== JSON.stringify(activeLease)) claimError = new Error(`Issue #${issue} owner lease 写后回读不一致。`);
+      else Object.assign(issueData, claimed);
     }
   }
 
@@ -1657,12 +1648,19 @@ function commandStart(argv) {
     const file = stateFile(root);
     try {
       writePrivateJson(file, state);
+      if (claimError) throw claimError;
       if (wantsClaim) {
         ownerSaga.steps.state = true;
         const marker = `[CLAIM] run=${ownerSaga.runId}`;
+        const assertEventSnapshot = () => {
+          const live = JSON.parse(run('gh', ['issue', 'view', String(issue), '--json', 'body,updatedAt'], { cwd: root }).stdout);
+          if (currentGitHubActor(root) !== actor || repoIdentity(root).nameWithOwner !== ownerSaga.expected.repository ||
+              sha256(live.body) !== sha256(issueData.body) || live.updatedAt !== issueData.updatedAt || JSON.stringify(parseOwnerLease(live.body)) !== JSON.stringify(activeLease)) throw new Error('claim event snapshot 已漂移。');
+        };
+        assertEventSnapshot();
         const comments = run('gh', ['issue', 'view', String(issue), '--json', 'comments', '--jq', '.comments[].body'], { cwd: root }).stdout;
         if (!comments.includes(marker)) runGitHubWrite(root, ['issue', 'comment', String(issue), '--body',
-          `${marker}\nowner=${owner}\nversion=${activeLease.version}\nstage=${stage}\nbranch=${branch}`], { timeout: 15_000 });
+          `${marker}\nowner=${owner}\nversion=${activeLease.version}\nstage=${stage}\nbranch=${branch}`], { timeout: 15_000, beforeWrite: assertEventSnapshot });
         ownerSaga.steps.event = true;
         ownerSaga.reconcile = 'complete';
         writePrivateJson(file, state);
