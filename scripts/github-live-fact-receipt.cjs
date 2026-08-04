@@ -93,6 +93,9 @@ function normalizeOptions(options) {
   if (candidateSha != null && !SHA_PATTERN.test(candidateSha)) {
     throw new Error('candidate SHA must be full 40-hex')
   }
+  if (decision === 'merge' && (prNumber == null || candidateSha == null)) {
+    throw new Error('merge decision requires PR and candidate SHA')
+  }
   return {
     repository,
     decision,
@@ -109,25 +112,38 @@ function diagnostic(receipt, severity, code, message) {
 }
 
 function finalVerdict(receipt) {
-  if (receipt.diagnostics.some((item) => item.severity === 'UNVERIFIED')) return 'UNVERIFIED'
   if (receipt.diagnostics.some((item) => item.severity === 'FAIL')) return 'FAIL'
+  if (receipt.diagnostics.some((item) => item.severity === 'UNVERIFIED')) return 'UNVERIFIED'
   return 'PASS'
 }
 
-function branchMatches(ruleset, branch) {
+function refPatternMatches(pattern, ref, branch, defaultBranch) {
+  if (pattern === '~ALL') return true
+  if (pattern === '~DEFAULT_BRANCH') return branch === defaultBranch
+  let source = '^'
+  for (const character of String(pattern)) {
+    if (character === '*') source += '.*'
+    else if (character === '?') source += '.'
+    else source += character.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+  }
+  return new RegExp(`${source}$`).test(ref)
+}
+
+function branchMatches(ruleset, branch, defaultBranch) {
   const condition = ruleset?.conditions?.ref_name
   if (!condition) return true
   const ref = `refs/heads/${branch}`
   const excluded = Array.isArray(condition.exclude) ? condition.exclude : []
-  if (excluded.includes(ref)) return false
+  if (excluded.some((pattern) => refPatternMatches(pattern, ref, branch, defaultBranch))) return false
   const included = Array.isArray(condition.include) ? condition.include : []
-  return included.length === 0 || included.includes(ref) || included.includes('~DEFAULT_BRANCH')
+  return included.length === 0 || included.some((pattern) =>
+    refPatternMatches(pattern, ref, branch, defaultBranch))
 }
 
-function requiredFromRulesets(rulesets, branch) {
+function requiredFromRulesets(rulesets, branch, defaultBranch) {
   const required = []
   for (const ruleset of rulesets) {
-    if (ruleset?.enforcement !== 'active' || !branchMatches(ruleset, branch)) continue
+    if (ruleset?.enforcement !== 'active' || !branchMatches(ruleset, branch, defaultBranch)) continue
     for (const rule of ruleset.rules || []) {
       if (rule?.type !== 'required_status_checks') continue
       for (const item of rule.parameters?.required_status_checks || []) {
@@ -144,17 +160,57 @@ function requiredFromRulesets(rulesets, branch) {
 }
 
 function requiredFromClassic(protection) {
-  const contexts = protection?.required_status_checks?.contexts
-  return Array.isArray(contexts)
-    ? contexts.map((context) => ({ context: String(context), integrationId: null, source: 'classic' }))
-    : []
+  const requiredStatusChecks = protection?.required_status_checks
+  const required = []
+  for (const item of Array.isArray(requiredStatusChecks?.checks) ? requiredStatusChecks.checks : []) {
+    if (!item?.context) continue
+    required.push({
+      context: String(item.context),
+      integrationId: Number.isInteger(item.app_id) ? item.app_id : null,
+      source: 'classic',
+    })
+  }
+  for (const context of Array.isArray(requiredStatusChecks?.contexts)
+    ? requiredStatusChecks.contexts
+    : []) {
+    if (required.some((item) => item.context === String(context))) continue
+    required.push({ context: String(context), integrationId: null, source: 'classic' })
+  }
+  return required
+}
+
+function mergeRequiredChecks(...groups) {
+  const merged = new Map()
+  for (const item of groups.flat()) {
+    const key = `${item.context}\u0000${item.integrationId ?? ''}`
+    const previous = merged.get(key)
+    if (!previous) merged.set(key, { ...item })
+    else if (!previous.source.split('+').includes(item.source)) {
+      previous.source = `${previous.source}+${item.source}`
+    }
+  }
+  return [...merged.values()]
+}
+
+function normalizeLabels(raw, kind) {
+  if (!Array.isArray(raw)) {
+    throw new LiveFactReadError('SCHEMA_INVALID', `${kind} response is missing labels`)
+  }
+  const labels = raw.map((label) => typeof label === 'string' ? label : label?.name)
+  if (labels.some((label) => typeof label !== 'string' || !label)) {
+    throw new LiveFactReadError('SCHEMA_INVALID', `${kind} response has an invalid label`)
+  }
+  return [...labels].sort()
 }
 
 function normalizeObject(raw, kind, provenance) {
   if (!raw || typeof raw !== 'object') throw new LiveFactReadError('SCHEMA_INVALID', `${kind} response is missing`)
   if (kind === 'pr') {
-    if (!Number.isInteger(raw.number) || !raw.head?.sha || !raw.base?.ref) {
-      throw new LiveFactReadError('SCHEMA_INVALID', 'PR response is missing number/head/base')
+    if (!Number.isInteger(raw.number) || typeof raw.state !== 'string' ||
+        typeof raw.merged !== 'boolean' || !SHA_PATTERN.test(String(raw.head?.sha || '')) ||
+        typeof raw.head?.ref !== 'string' || !SHA_PATTERN.test(String(raw.base?.sha || '')) ||
+        typeof raw.base?.ref !== 'string' || typeof raw.updated_at !== 'string') {
+      throw new LiveFactReadError('SCHEMA_INVALID', 'PR response is missing identity/state/head/base/version')
     }
     return {
       kind,
@@ -165,21 +221,43 @@ function normalizeObject(raw, kind, provenance) {
       headRef: raw.head.ref,
       baseSha: raw.base.sha ? String(raw.base.sha).toLowerCase() : null,
       baseRef: raw.base.ref,
+      labels: normalizeLabels(raw.labels, kind),
+      updatedAt: raw.updated_at,
       provenance,
     }
   }
-  if (!Number.isInteger(raw.number) || !raw.state) {
-    throw new LiveFactReadError('SCHEMA_INVALID', 'Issue response is missing number/state')
+  if (!Number.isInteger(raw.number) || typeof raw.state !== 'string' ||
+      typeof raw.updated_at !== 'string') {
+    throw new LiveFactReadError('SCHEMA_INVALID', 'Issue response is missing number/state/version')
   }
   return {
     kind,
     number: raw.number,
     state: raw.state,
-    labels: Array.isArray(raw.labels)
-      ? raw.labels.map((label) => typeof label === 'string' ? label : label?.name).filter(Boolean)
-      : [],
+    labels: normalizeLabels(raw.labels, kind),
+    updatedAt: raw.updated_at,
     provenance,
   }
+}
+
+function objectVersion(object) {
+  if (object.kind === 'pr') {
+    return JSON.stringify({
+      state: object.state,
+      merged: object.merged,
+      headSha: object.headSha,
+      headRef: object.headRef,
+      baseSha: object.baseSha,
+      baseRef: object.baseRef,
+      labels: object.labels,
+      updatedAt: object.updatedAt,
+    })
+  }
+  return JSON.stringify({
+    state: object.state,
+    labels: object.labels,
+    updatedAt: object.updatedAt,
+  })
 }
 
 function resolveLiveFacts(options, transport = createGhTransport()) {
@@ -197,6 +275,7 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       activeRulesets: [],
       classic: { state: 'UNREAD' },
       requiredChecks: [],
+      strictRequiredStatusChecks: false,
     },
     legacyCombinedStatus: null,
     checks: [],
@@ -226,6 +305,8 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       diagnostic(receipt, 'FAIL', 'REPOSITORY_IDENTITY_MISMATCH',
         `expected ${input.repository}, received ${repository?.full_name || '<missing>'}`)
     }
+    const defaultBranch = String(repository?.default_branch || '')
+    if (!defaultBranch) throw new LiveFactReadError('SCHEMA_INVALID', 'repository default branch is missing')
 
     const branch = get(`repos/${input.repository}/branches/${input.targetBranch}`, 'target-branch')
     if (!SHA_PATTERN.test(String(branch?.commit?.sha || ''))) {
@@ -262,10 +343,27 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       receipt.protection.classic = { state: 'NOT_FOUND' }
     }
 
-    const rulesetRequired = requiredFromRulesets(rulesets, input.targetBranch)
+    const matchingRulesets = rulesets.filter((ruleset) =>
+      ruleset?.enforcement === 'active' && branchMatches(ruleset, input.targetBranch, defaultBranch))
+    const rulesetRequired = requiredFromRulesets(rulesets, input.targetBranch, defaultBranch)
     const classicRequired = requiredFromClassic(classic)
-    receipt.protection.requiredChecks = rulesetRequired.length ? rulesetRequired : classicRequired
-    receipt.protection.source = rulesetRequired.length ? 'ruleset' : classicRequired.length ? 'classic' : 'none'
+    receipt.protection.requiredChecks = mergeRequiredChecks(rulesetRequired, classicRequired)
+    receipt.protection.source = rulesetRequired.length && classicRequired.length
+      ? 'ruleset+classic'
+      : rulesetRequired.length
+        ? 'ruleset'
+        : classicRequired.length
+          ? 'classic'
+          : 'none'
+    receipt.protection.strictRequiredStatusChecks =
+      matchingRulesets.some((ruleset) => (ruleset.rules || []).some((rule) =>
+        rule?.type === 'required_status_checks' &&
+        rule.parameters?.strict_required_status_checks_policy === true)) ||
+      classic?.required_status_checks?.strict === true
+    if (input.decision === 'merge' && receipt.protection.requiredChecks.length === 0) {
+      diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_POLICY_MISSING',
+        'merge decision has no applicable required checks')
+    }
 
     const kind = input.prNumber != null ? 'pr' : input.issueNumber != null ? 'issue' : null
     const number = input.prNumber ?? input.issueNumber
@@ -292,7 +390,12 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
         }
       }
       if (!raw) raw = get(restPath, `${kind}-rest`)
-      receipt.object = normalizeObject(raw, kind, provenance)
+      const object = normalizeObject(raw, kind, provenance)
+      if (object.number !== number) {
+        diagnostic(receipt, 'FAIL', 'OBJECT_IDENTITY_MISMATCH',
+          `requested ${kind} ${number}, received ${object.number}`)
+      }
+      receipt.object = object
     }
 
     if (receipt.object?.kind === 'pr') {
@@ -304,6 +407,7 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
     }
 
     if (receipt.candidate) {
+      let candidateReachable = true
       try {
         const commit = get(`repos/${input.repository}/commits/${receipt.candidate}`, 'candidate-commit')
         if (String(commit?.sha || '').toLowerCase() !== receipt.candidate) {
@@ -313,70 +417,111 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
         const failure = readError(error)
         if ([404, 422].includes(failure.status)) {
           diagnostic(receipt, 'FAIL', 'CANDIDATE_UNREACHABLE', `${receipt.candidate} is unreachable`)
+          candidateReachable = false
         } else {
           throw failure
         }
       }
 
-      const combinedStatus = get(
-        `repos/${input.repository}/commits/${receipt.candidate}/status`,
-        'legacy-combined-status',
-      )
-      receipt.legacyCombinedStatus = {
-        sha: combinedStatus?.sha || null,
-        state: combinedStatus?.state || null,
-        totalCount: Number.isInteger(combinedStatus?.total_count) ? combinedStatus.total_count : null,
-      }
-      if (String(combinedStatus?.sha || '').toLowerCase() !== receipt.candidate) {
-        diagnostic(receipt, 'FAIL', 'LEGACY_STATUS_SHA_MISMATCH', 'combined status is for another SHA')
-      }
+      if (candidateReachable) {
+        const comparison = get(
+          `repos/${input.repository}/compare/${receipt.target.sha}...${receipt.candidate}`,
+          'target-candidate-compare',
+        )
+        if (!SHA_PATTERN.test(String(comparison?.base_commit?.sha || '')) ||
+            !SHA_PATTERN.test(String(comparison?.merge_base_commit?.sha || '')) ||
+            typeof comparison?.status !== 'string') {
+          throw new LiveFactReadError('SCHEMA_INVALID', 'target/candidate comparison is incomplete')
+        }
+        if (String(comparison.base_commit.sha).toLowerCase() !== receipt.target.sha) {
+          diagnostic(receipt, 'FAIL', 'COMPARISON_BASE_MISMATCH',
+            `comparison base does not equal target ${receipt.target.sha}`)
+        }
+        receipt.candidateRelationship = {
+          targetSha: receipt.target.sha,
+          candidateSha: receipt.candidate,
+          status: comparison.status,
+          mergeBaseSha: String(comparison.merge_base_commit.sha).toLowerCase(),
+          aheadBy: Number.isInteger(comparison.ahead_by) ? comparison.ahead_by : null,
+          behindBy: Number.isInteger(comparison.behind_by) ? comparison.behind_by : null,
+        }
+        if (input.decision === 'merge' && receipt.protection.strictRequiredStatusChecks &&
+            receipt.candidateRelationship.mergeBaseSha !== receipt.target.sha) {
+          diagnostic(receipt, 'FAIL', 'CANDIDATE_BEHIND_TARGET',
+            `candidate does not contain target ${receipt.target.sha}`)
+        }
 
-      const checkRuns = list(`repos/${input.repository}/commits/${receipt.candidate}/check-runs`, 'check_runs')
-      for (const required of receipt.protection.requiredChecks) {
-        const sameName = checkRuns.filter((run) => run?.name === required.context)
-        const sameSha = sameName.filter((run) => String(run?.head_sha || '').toLowerCase() === receipt.candidate)
-        if (sameSha.length === 0) {
-          diagnostic(receipt, 'FAIL', sameName.length ? 'REQUIRED_CHECK_STALE_SHA' : 'REQUIRED_CHECK_MISSING',
-            `${required.context} has no run for ${receipt.candidate}`)
-          receipt.checks.push({ ...required, state: 'MISSING' })
-          continue
+        const combinedStatus = get(
+          `repos/${input.repository}/commits/${receipt.candidate}/status`,
+          'legacy-combined-status',
+        )
+        receipt.legacyCombinedStatus = {
+          sha: combinedStatus?.sha || null,
+          state: combinedStatus?.state || null,
+          totalCount: Number.isInteger(combinedStatus?.total_count) ? combinedStatus.total_count : null,
         }
-        const sameApp = required.integrationId == null
-          ? sameSha
-          : sameSha.filter((run) => Number(run?.app?.id) === required.integrationId)
-        if (sameApp.length === 0) {
-          diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_APP_MISMATCH',
-            `${required.context} is not from app ${required.integrationId}`)
-          receipt.checks.push({ ...required, state: 'APP_MISMATCH' })
-          continue
+        if (String(combinedStatus?.sha || '').toLowerCase() !== receipt.candidate) {
+          diagnostic(receipt, 'FAIL', 'LEGACY_STATUS_SHA_MISMATCH', 'combined status is for another SHA')
         }
-        const run = [...sameApp].sort((left, right) =>
-          String(left?.completed_at || '').localeCompare(String(right?.completed_at || ''))).at(-1)
-        const success = run?.status === 'completed' && run?.conclusion === 'success'
-        receipt.checks.push({
-          ...required,
-          state: success ? 'SUCCESS' : 'NOT_SUCCESS',
-          status: run?.status || null,
-          conclusion: run?.conclusion || null,
-          headSha: run?.head_sha || null,
-          appId: run?.app?.id ?? null,
-        })
-        if (!success) {
-          diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_NOT_SUCCESS',
-            `${required.context} is ${run?.status || 'unknown'}/${run?.conclusion || 'none'}`)
+
+        const checkRuns = list(`repos/${input.repository}/commits/${receipt.candidate}/check-runs`, 'check_runs')
+        for (const required of receipt.protection.requiredChecks) {
+          const sameName = checkRuns.filter((run) => run?.name === required.context)
+          const sameSha = sameName.filter((run) => String(run?.head_sha || '').toLowerCase() === receipt.candidate)
+          if (sameSha.length === 0) {
+            diagnostic(receipt, 'FAIL', sameName.length ? 'REQUIRED_CHECK_STALE_SHA' : 'REQUIRED_CHECK_MISSING',
+              `${required.context} has no run for ${receipt.candidate}`)
+            receipt.checks.push({ ...required, state: 'MISSING' })
+            continue
+          }
+          const sameApp = required.integrationId == null
+            ? sameSha
+            : sameSha.filter((run) => Number(run?.app?.id) === required.integrationId)
+          if (sameApp.length === 0) {
+            diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_APP_MISMATCH',
+              `${required.context} is not from app ${required.integrationId}`)
+            receipt.checks.push({ ...required, state: 'APP_MISMATCH' })
+            continue
+          }
+          const run = [...sameApp].sort((left, right) =>
+            String(left?.completed_at || '').localeCompare(String(right?.completed_at || ''))).at(-1)
+          const success = run?.status === 'completed' && run?.conclusion === 'success'
+          receipt.checks.push({
+            ...required,
+            state: success ? 'SUCCESS' : 'NOT_SUCCESS',
+            status: run?.status || null,
+            conclusion: run?.conclusion || null,
+            headSha: run?.head_sha || null,
+            appId: run?.app?.id ?? null,
+          })
+          if (!success) {
+            diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_NOT_SUCCESS',
+              `${required.context} is ${run?.status || 'unknown'}/${run?.conclusion || 'none'}`)
+          }
         }
       }
     }
 
-    if (receipt.object?.kind === 'pr') {
+    if (receipt.object) {
+      const finalPath = receipt.object.kind === 'pr'
+        ? `repos/${input.repository}/pulls/${number}`
+        : `repos/${input.repository}/issues/${number}`
       const final = normalizeObject(
-        get(`repos/${input.repository}/pulls/${receipt.object.number}`, 'pr-final-readback'),
-        'pr',
+        get(finalPath, `${receipt.object.kind}-final-readback`),
+        receipt.object.kind,
         'rest',
       )
-      if (final.headSha !== receipt.object.headSha) {
+      if (final.number !== number) {
+        diagnostic(receipt, 'FAIL', 'OBJECT_IDENTITY_MISMATCH',
+          `final ${receipt.object.kind} read returned ${final.number}, expected ${number}`)
+      }
+      if (receipt.object.kind === 'pr' && final.headSha !== receipt.object.headSha) {
         diagnostic(receipt, 'FAIL', 'PR_HEAD_CHANGED',
           `PR head moved from ${receipt.object.headSha} to ${final.headSha}`)
+      }
+      if (objectVersion(final) !== objectVersion(receipt.object)) {
+        diagnostic(receipt, 'FAIL', 'OBJECT_CHANGED',
+          `${receipt.object.kind} state, labels, refs, or version changed before decision`)
       }
     }
   } catch (error) {
