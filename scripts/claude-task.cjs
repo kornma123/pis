@@ -908,6 +908,41 @@ function parseOwnerBlock(body) {
   return owner ? owner[1].trim() : null;
 }
 
+function parseOwnerLease(body) {
+  const ownerId = parseOwnerBlock(body);
+  if (!ownerId) return null;
+  const block = String(body).match(/<!--\s*coreone-owner:start\s*-->([\s\S]*?)<!--\s*coreone-owner:end\s*-->/i)?.[1] || '';
+  const line = block.match(/-\s*\*\*owner lease\*\*\s*[:：]\s*(.+)\s*$/im)?.[1]?.trim();
+  const raw = line?.replace(/^`([\s\S]*)`$/u, '$1');
+  if (!raw) {
+    return { ownerId, leaseState: /^unassigned$/i.test(ownerId) ? 'unassigned' : 'active', candidatePr: null, version: 0, nextTrigger: 'legacy-migration', legacy: true };
+  }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { throw new Error('owner lease JSON 无效。'); }
+  const keys = Object.keys(parsed || {}).sort().join(',');
+  if (
+    keys !== 'candidate_pr,lease_state,next_trigger,owner_id,version' ||
+    parsed.owner_id !== ownerId ||
+    !['active', 'unassigned'].includes(parsed.lease_state) ||
+    !Number.isInteger(parsed.version) || parsed.version < 0 ||
+    (parsed.candidate_pr != null && (!Number.isInteger(parsed.candidate_pr) || parsed.candidate_pr <= 0)) ||
+    !String(parsed.next_trigger || '').trim() || ((ownerId === 'unassigned') !== (parsed.lease_state === 'unassigned'))
+  ) throw new Error('owner lease 与 current owner、状态、candidate 或 version 不一致。');
+  return { ownerId, leaseState: parsed.lease_state, candidatePr: parsed.candidate_pr, version: parsed.version, nextTrigger: parsed.next_trigger, legacy: false };
+}
+
+function replaceOwnerLease(body, lease) {
+  const line = `- **owner lease**: \`${JSON.stringify({ owner_id: lease.ownerId,
+    lease_state: lease.leaseState, candidate_pr: lease.candidatePr,
+    version: lease.version, next_trigger: lease.nextTrigger })}\``;
+  let next = String(body).replace(/(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i, `$1${lease.ownerId}`);
+  next = /-\s*\*\*owner lease\*\*\s*[:：]/i.test(next)
+    ? next.replace(/-\s*\*\*owner lease\*\*\s*[:：].+/i, line)
+    : next.replace(/<!--\s*coreone-owner:end\s*-->/i, `${line}\n<!-- coreone-owner:end -->`);
+  parseOwnerLease(next);
+  return next;
+}
+
 function parsePrdRef(value) {
   const raw = String(value || '').trim();
   const separator = raw.lastIndexOf('@');
@@ -1429,7 +1464,12 @@ function commandStart(argv) {
   if (!/^R[0-3]$/.test(risk)) throw new Error('--risk 必须是 R0 / R1 / R2 / R3。');
   if (flags.owned.length === 0) throw new Error('至少提供一个 --owned=<path/glob>。');
   flags.owned = normalizeTaskOwnedScope(flags.owned);
-  if (inspectTaskState(root).kind === 'valid') {
+  const initialTask = inspectTaskState(root);
+  const recoveryState = initialTask.kind === 'valid' && initialTask.state.issue === issue &&
+    initialTask.state.owner === owner && initialTask.state.ownerSaga?.kind === 'claim' &&
+    ['in-progress', 'RECOVERY_REQUIRED'].includes(initialTask.state.ownerSaga.reconcile)
+    ? initialTask.state : null;
+  if (initialTask.kind === 'valid' && !recoveryState) {
     throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用新的 start 覆盖。');
   }
   if (git(['status', '--short'], root).stdout) {
@@ -1446,18 +1486,33 @@ function commandStart(argv) {
 
   const issueResult = run(
     'gh',
-    ['issue', 'view', String(issue), '--json', 'state,body,url,title,labels'],
+    ['issue', 'view', String(issue), '--json', 'number,state,body,url,title,labels,updatedAt'],
     { cwd: root, timeout: 10_000 },
   );
   const issueData = JSON.parse(issueResult.stdout);
   if (issueData.state !== 'OPEN') throw new Error(`Issue #${issue} 不是 OPEN。`);
   const issueRating = assertIssueImplementationLabels(issueData.labels, issue);
-  const issueOwner = parseOwnerBlock(issueData.body);
-  if (!issueOwner) throw new Error(`Issue #${issue} 缺少 coreone-owner 受控块。`);
+  const issueLease = parseOwnerLease(issueData.body);
+  if (!issueLease) throw new Error(`Issue #${issue} 缺少 coreone-owner 受控块。`);
   const wantsClaim = String(flags.claim || '').toLowerCase() === 'true';
-  const canClaim = wantsClaim && /^(?:unassigned|待认领)$/i.test(issueOwner);
-  if (!canClaim && issueOwner.localeCompare(owner, undefined, { sensitivity: 'accent' }) !== 0) {
-    throw new Error(`Issue #${issue} 当前 owner=${issueOwner}，与 --owner=${owner} 不一致。`);
+  const expectedVersion = Number(flags['owner-version']);
+  const candidatePr = flags['candidate-pr'] == null ? null : Number(flags['candidate-pr']);
+  const actor = wantsClaim ? currentGitHubActor(root) : null;
+  if (wantsClaim && (!Number.isInteger(expectedVersion) || expectedVersion < 0)) {
+    throw new Error('--claim=true 必须提供 --owner-version=<expected integer>。');
+  }
+  if (candidatePr != null && (!Number.isInteger(candidatePr) || candidatePr <= 0)) {
+    throw new Error('--candidate-pr 必须是正整数。');
+  }
+  const canClaim = wantsClaim && issueLease.ownerId === 'unassigned' &&
+    issueLease.leaseState === 'unassigned' && issueLease.version === expectedVersion;
+  const resumeClaim = wantsClaim && issueLease.ownerId === owner && issueLease.leaseState === 'active' &&
+    issueLease.version === expectedVersion + 1 && issueLease.nextTrigger === `handoff-required@${actor}`;
+  if (wantsClaim && !canClaim && !resumeClaim) {
+    throw new Error(`Issue #${issue} owner/version 已漂移；expected=unassigned@${expectedVersion}。`);
+  }
+  if (!wantsClaim && issueLease.ownerId.localeCompare(owner, undefined, { sensitivity: 'accent' }) !== 0) {
+    throw new Error(`Issue #${issue} 当前 owner=${issueLease.ownerId}，与 --owner=${owner} 不一致。`);
   }
 
   const ownershipInspection = inspectClaudeImplementationOwnership(stage, flags.owned);
@@ -1524,30 +1579,39 @@ function commandStart(argv) {
   ];
   const preflight = run(process.execPath, preflightArgs, { cwd: root, timeout: 240_000 });
 
-  if (canClaim && !flags.dryRun) {
-    const claimedBody = issueData.body.replace(
-      /(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i,
-      `$1${owner}`,
-    );
-    runGitHubWrite(root, ['issue', 'edit', String(issue), '--body', claimedBody], {
-      timeout: 15_000,
-    });
-    const claimedIssue = JSON.parse(
-      run('gh', ['issue', 'view', String(issue), '--json', 'state,body,url,title,labels'], {
-        cwd: root,
-        timeout: 10_000,
-      }).stdout,
-    );
-    const claimedRating = assertIssueImplementationLabels(claimedIssue.labels, issue);
-    if (
-      claimedIssue.state !== 'OPEN' ||
-      parseOwnerBlock(claimedIssue.body) !== owner ||
-      claimedRating.priority !== issueRating.priority ||
-      claimedRating.releaseImpact !== issueRating.releaseImpact
-    ) {
-      throw new Error(`Issue #${issue} 认领后复核失败；停止建立本地 task state。`);
+  let activeLease = issueLease;
+  let ownerSaga = recoveryState?.ownerSaga || null, claimError;
+  if (wantsClaim) {
+    const identity = repoIdentity(root);
+    if (recoveryState && (ownerSaga.actor !== actor || ownerSaga.expected?.repository !== identity.nameWithOwner || ownerSaga.expected?.issue !== issue ||
+        ownerSaga.expected?.owner !== 'unassigned' || ownerSaga.expected?.version !== expectedVersion || ownerSaga.expected?.candidatePr !== candidatePr)) throw new Error('本地 claim recovery state 与 repo/Issue/actor/version/candidate 不一致。');
+    const receipt = JSON.parse(run(process.execPath, [
+      path.join(root, 'scripts', 'github-live-fact-receipt.cjs'),
+      `--repo=${identity.nameWithOwner}`, '--decision=claim', '--target=master', `--issue=${issue}`,
+    ], { cwd: root, timeout: 60_000 }).stdout);
+    if (receipt.verdict !== 'PASS' || receipt.object?.number !== issue || receipt.object?.updatedAt !== issueData.updatedAt) throw new Error('GOV-007 claim receipt 与当前 Issue snapshot 不一致。');
+    activeLease = resumeClaim ? issueLease : { ownerId: owner, leaseState: 'active', candidatePr,
+      version: expectedVersion + 1, nextTrigger: `handoff-required@${actor}`, legacy: false };
+    if (resumeClaim && activeLease.candidatePr !== candidatePr) throw new Error('candidate PR 已漂移。');
+    const runId = sha256(`${identity.nameWithOwner}:${issue}:${owner}:${activeLease.version}:${candidatePr ?? 'none'}`).slice(0, 16);
+    ownerSaga = { kind: 'claim', runId, reconcile: 'in-progress', actor,
+      expected: { repository: identity.nameWithOwner, issue, owner: 'unassigned',
+        version: expectedVersion, candidatePr, bodyHash: sha256(issueData.body), updatedAt: issueData.updatedAt },
+      receipt: { version: receipt.version, queriedAt: receipt.queriedAt }, steps: { body: resumeClaim, state: false, event: false } };
+    if (canClaim && !flags.dryRun) {
+      const claimedBody = replaceOwnerLease(issueData.body, activeLease);
+      runGitHubWrite(root, ['issue', 'edit', String(issue), '--body', claimedBody], { timeout: 15_000,
+        beforeWrite: () => {
+          const live = JSON.parse(run('gh', ['issue', 'view', String(issue), '--json', 'body,updatedAt'], { cwd: root }).stdout);
+          if (currentGitHubActor(root) !== actor || sha256(live.body) !== ownerSaga.expected.bodyHash ||
+              live.updatedAt !== ownerSaga.expected.updatedAt) throw new Error('owner lease CAS snapshot 已漂移。');
+        } });
+      ownerSaga.steps.body = true;
+      const claimed = JSON.parse(run('gh', ['issue', 'view', String(issue), '--json',
+        'number,state,body,url,title,labels,updatedAt'], { cwd: root }).stdout);
+      if (claimed.state !== 'OPEN' || JSON.stringify(parseOwnerLease(claimed.body)) !== JSON.stringify(activeLease)) claimError = new Error(`Issue #${issue} owner lease 写后回读不一致。`);
+      else Object.assign(issueData, claimed);
     }
-    Object.assign(issueData, claimedIssue);
   }
 
   const state = {
@@ -1576,17 +1640,36 @@ function commandStart(argv) {
     deliveryContract,
     sourceMode,
     ownershipException,
+    ownerLease: activeLease,
+    ownerSaga,
   };
 
   if (!flags.dryRun) {
     const file = stateFile(root);
-    writePrivateJson(file, state);
-    if (canClaim) {
-      runGitHubWrite(
-        root,
-        ['issue', 'comment', String(issue), '--body', `[CLAIM] owner=${owner}\nstage=${stage}\nbranch=${branch}`],
-        { timeout: 15_000 },
-      );
+    try {
+      writePrivateJson(file, state);
+      if (claimError) throw claimError;
+      if (wantsClaim) {
+        ownerSaga.steps.state = true;
+        const marker = `[CLAIM] run=${ownerSaga.runId}`;
+        const assertEventSnapshot = () => {
+          const live = JSON.parse(run('gh', ['issue', 'view', String(issue), '--json', 'body,updatedAt'], { cwd: root }).stdout);
+          if (currentGitHubActor(root) !== actor || repoIdentity(root).nameWithOwner !== ownerSaga.expected.repository ||
+              sha256(live.body) !== sha256(issueData.body) || live.updatedAt !== issueData.updatedAt || JSON.stringify(parseOwnerLease(live.body)) !== JSON.stringify(activeLease)) throw new Error('claim event snapshot 已漂移。');
+        };
+        assertEventSnapshot();
+        const comments = run('gh', ['issue', 'view', String(issue), '--json', 'comments', '--jq', '.comments[].body'], { cwd: root }).stdout;
+        if (!comments.includes(marker)) runGitHubWrite(root, ['issue', 'comment', String(issue), '--body',
+          `${marker}\nowner=${owner}\nversion=${activeLease.version}\nstage=${stage}\nbranch=${branch}`], { timeout: 15_000, beforeWrite: assertEventSnapshot });
+        ownerSaga.steps.event = true;
+        ownerSaga.reconcile = 'complete';
+        writePrivateJson(file, state);
+      }
+    } catch (error) {
+      if (!wantsClaim || !ownerSaga.steps.body) throw error;
+      ownerSaga.reconcile = 'RECOVERY_REQUIRED';
+      try { writePrivateJson(file, state); } catch { /* retry may recover from the live lease */ }
+      throw new Error(`RECOVERY_REQUIRED run=${ownerSaga.runId}: ${error.message}`);
     }
   }
 
@@ -2071,6 +2154,9 @@ function assertActiveState(root, active, options = {}) {
   const liveOwner = parseOwnerBlock(issue.body);
   if (liveOwner?.localeCompare(state.owner, undefined, { sensitivity: 'accent' }) !== 0) {
     throw new Error(`Issue #${state.issue} owner 已变化（${state.owner} -> ${liveOwner || '缺失'}）。`);
+  }
+  if (state.ownerLease && JSON.stringify(parseOwnerLease(issue.body)) !== JSON.stringify(state.ownerLease)) {
+    throw new Error(`Issue #${state.issue} owner lease 已变化。`);
   }
   if (state.approval) {
     assertPmApproval(root, state.approval.url, { label: 'PRD PM 定稿证据', baseline: state.prd });
@@ -5011,7 +5097,14 @@ function commandHandoff(argv) {
   if (!HANDOFF_STATUSES.has(status)) {
     throw new Error(`--status 必须是 ${[...HANDOFF_STATUSES].join(' / ')}。`);
   }
-  assertActiveState(root, active, { force: true });
+  const priorLease = active.state.ownerLease; const claimActor = priorLease?.nextTrigger?.match(/^handoff-required@(.+)$/)?.[1] || active.state.ownerSaga?.actor;
+  if (priorLease && !priorLease.legacy && currentGitHubActor(root) !== claimActor) throw new Error('handoff actor 与 claim lease 不一致。');
+  const live = priorLease && !priorLease.legacy
+    ? JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body,updatedAt'], { cwd: root }).stdout)
+    : null;
+  const released = live && (() => { const lease = parseOwnerLease(live.body); return lease.ownerId === 'unassigned' &&
+    lease.version === priorLease.version + 1 && lease.nextTrigger === `handoff:${status}`; })();
+  if (!released) assertActiveState(root, active, { force: true });
   assertOwnedChanges(root, active.state);
   const handoff = verifyGitHubEvidence(root, evidence, {
     label: 'GitHub handoff 证据',
@@ -5024,6 +5117,29 @@ function commandHandoff(argv) {
   });
   if (handoff.parsed.kind !== 'issue') {
     throw new Error(`handoff 必须是活动 Issue #${active.state.issue} 的普通评论，不使用 PR 评论。`);
+  }
+  if (priorLease && !priorLease.legacy && currentGitHubActor(root) !== claimActor) throw new Error('handoff actor 在 evidence 回读后已漂移。');
+  if (live && !released) {
+    const receipt = JSON.parse(run(process.execPath, [path.join(root, 'scripts', 'github-live-fact-receipt.cjs'),
+      `--repo=${repoIdentity(root).nameWithOwner}`, '--decision=handoff', '--target=master',
+      `--issue=${active.state.issue}`], { cwd: root, timeout: 60_000 }).stdout);
+    if (receipt.verdict !== 'PASS' || receipt.object?.updatedAt !== live.updatedAt) throw new Error('GOV-007 handoff receipt 已漂移。');
+    const nextLease = { ownerId: 'unassigned', leaseState: 'unassigned', candidatePr: null,
+      version: priorLease.version + 1, nextTrigger: `handoff:${status}`, legacy: false };
+    active.state.ownerSaga = { kind: 'handoff', runId: sha256(`${active.state.issue}:${nextLease.version}:${evidence}`).slice(0, 16),
+      reconcile: 'in-progress', evidence, steps: { event: true, body: false, state: true } };
+    writePrivateJson(active.file, active.state);
+    try {
+      runGitHubWrite(root, ['issue', 'edit', String(active.state.issue), '--body', replaceOwnerLease(live.body, nextLease)], {
+        beforeWrite: () => { const current = JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body,updatedAt'], { cwd: root }).stdout);
+          if (currentGitHubActor(root) !== claimActor || sha256(current.body) !== sha256(live.body) || current.updatedAt !== live.updatedAt) throw new Error('handoff lease CAS snapshot 已漂移。'); } });
+      const readback = JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body'], { cwd: root }).stdout);
+      if (JSON.stringify(parseOwnerLease(readback.body)) !== JSON.stringify(nextLease)) throw new Error('handoff lease 写后回读不一致。');
+    } catch (error) {
+      active.state.ownerSaga.reconcile = 'RECOVERY_REQUIRED';
+      writePrivateJson(active.file, active.state);
+      throw new Error(`RECOVERY_REQUIRED run=${active.state.ownerSaga.runId}: ${error.message}`);
+    }
   }
   removePrivateFile(active.file);
   process.stdout.write(
@@ -5108,8 +5224,10 @@ module.exports = {
   parseIssueRatingMarker,
   parsePmApprovalMarker,
   parseOwnerBlock,
+  parseOwnerLease,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  replaceOwnerLease,
   resolveIssueCreationManifestPath,
   shouldBlockStop,
   shellTokens,
