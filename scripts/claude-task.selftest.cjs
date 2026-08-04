@@ -28,9 +28,11 @@ const {
   parseIssueCreationApprovalMarker,
   parseIssueRatingMarker,
   parseOwnerBlock,
+  parseOwnerLease,
   parsePmApprovalMarker,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  replaceOwnerLease,
   resolveIssueCreationManifestPath,
   shouldBlockStop,
   shellTokens,
@@ -290,6 +292,159 @@ const ownerBody = `
 - **stage / model / surface**: implementation / current / local
 <!-- coreone-owner:end -->`;
 assert.equal(parseOwnerBlock(ownerBody), 'Claude Code');
+
+const legacyUnassignedLeaseBody = `
+<!-- coreone-owner:start -->
+- **current owner**: unassigned
+- **claimed at / next trigger**: 未认领 / PM claim
+<!-- coreone-owner:end -->`;
+assert.deepEqual(parseOwnerLease(legacyUnassignedLeaseBody), {
+  ownerId: 'unassigned',
+  leaseState: 'unassigned',
+  candidatePr: null,
+  version: 0,
+  nextTrigger: 'legacy-migration',
+  legacy: true,
+});
+
+const canonicalLeaseBody = replaceOwnerLease(legacyUnassignedLeaseBody, {
+  ownerId: 'Codex',
+  leaseState: 'active',
+  candidatePr: 129,
+  version: 1,
+  nextTrigger: 'handoff-required',
+});
+assert.deepEqual(parseOwnerLease(canonicalLeaseBody), {
+  ownerId: 'Codex',
+  leaseState: 'active',
+  candidatePr: 129,
+  version: 1,
+  nextTrigger: 'handoff-required',
+  legacy: false,
+});
+assert.equal(parseOwnerBlock(canonicalLeaseBody), 'Codex');
+for (const owner of ['unassigned (reason)', 'unassigned release-x', 'none']) {
+  const body = legacyUnassignedLeaseBody.replace('unassigned\n', `${owner}\n`);
+  assert.notEqual(parseOwnerLease(body).ownerId, 'unassigned', `${owner} must not become claimable`);
+}
+
+function runOwnerLeaseSagaFixture() {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-owner-saga-'));
+  const repo = path.join(sandbox, 'repo');
+  const remote = path.join(sandbox, 'origin.git');
+  const fakeBin = path.join(sandbox, 'bin');
+  const issueFile = path.join(sandbox, 'issue.json');
+  const commentsFile = path.join(sandbox, 'comments.json');
+  const actorFile = path.join(sandbox, 'actor.txt');
+  const modeFile = path.join(sandbox, 'mode.json');
+  const markerFile = path.join(sandbox, 'once.marker');
+  const readbackFile = path.join(sandbox, 'readback.marker');
+  const runGit = (args, cwd = repo) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    return String(result.stdout || '').trim();
+  };
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    fs.mkdirSync(fakeBin, { recursive: true });
+    runGit(['init', '--initial-branch=owner-saga-test']);
+    runGit(['config', 'user.name', 'Owner Saga Test']);
+    runGit(['config', 'user.email', 'owner-saga@example.invalid']);
+    for (const [name, source] of [
+      ['agent-preflight.cjs', "process.stdout.write('preflight PASS')\n"],
+      ['offline-github-governance.cjs', "process.stdout.write('offline PASS')\n"],
+      ['github-live-fact-receipt.cjs', `const fs=require('node:fs');const i=JSON.parse(fs.readFileSync(process.env.FAKE_ISSUE,'utf8'));process.stdout.write(JSON.stringify({version:'coreone-github-live-fact-receipt/v1',queriedAt:'2026-08-04T00:00:00Z',verdict:'PASS',object:{number:i.number,updatedAt:i.updatedAt}}))\n`],
+    ]) fs.writeFileSync(path.join(repo, 'scripts', name), source, 'utf8');
+    fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed owner saga fixture']);
+    runGit(['init', '--bare', remote], sandbox);
+    runGit(['remote', 'add', 'origin', remote]);
+    runGit(['push', 'origin', 'HEAD:refs/heads/master']);
+
+    const issue = {
+      number: 81, state: 'OPEN', url: 'https://github.com/acme/coreone/issues/81',
+      title: 'Owner saga fixture', labels: [{ name: 'P1' }, { name: '非阻断上线' }],
+      updatedAt: '2026-08-04T00:00:00Z', body: legacyUnassignedLeaseBody,
+    };
+    fs.writeFileSync(issueFile, JSON.stringify(issue));
+    fs.writeFileSync(commentsFile, '[]');
+    fs.writeFileSync(actorFile, 'actor-a');
+    fs.writeFileSync(modeFile, JSON.stringify({ failCommentOnce: true }));
+
+    const fakeGh = path.join(fakeBin, 'gh');
+    fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+'use strict';
+const fs=require('node:fs'),args=process.argv.slice(2),issueFile=process.env.FAKE_ISSUE;
+const read=()=>JSON.parse(fs.readFileSync(issueFile,'utf8'));
+const comments=()=>JSON.parse(fs.readFileSync(process.env.FAKE_COMMENTS,'utf8'));
+const actor=()=>fs.readFileSync(process.env.FAKE_ACTOR,'utf8').trim();
+if(args[0]==='repo'&&args[1]==='view') console.log(JSON.stringify({nameWithOwner:'acme/coreone',url:'https://github.com/acme/coreone'}));
+else if(args[0]==='api'&&args[1]==='user') console.log(actor());
+else if(args[0]==='api'&&args[1]==='repos/acme/coreone/issues/comments/123') console.log(JSON.stringify({issue_url:'https://api.github.com/repos/acme/coreone/issues/81',created_at:new Date(Date.now()+1000).toISOString(),user:{login:'actor-a'},body:process.env.FAKE_HANDOFF}));
+else if(args[0]==='issue'&&args[1]==='view') {
+  if(fs.existsSync(process.env.FAKE_READBACK)){fs.unlinkSync(process.env.FAKE_READBACK);console.error('unexpected EOF');process.exit(1);}
+  if(args.includes('comments')) console.log(comments().map((item)=>item.body).join('\\n'));
+  else console.log(JSON.stringify(read()));
+} else if(args[0]==='issue'&&args[1]==='edit') {
+  const value=read(),body=args[args.indexOf('--body')+1];value.body=body;value.updatedAt='2026-08-04T00:05:00Z';fs.writeFileSync(issueFile,JSON.stringify(value));
+  if(JSON.parse(fs.readFileSync(process.env.FAKE_MODE,'utf8')).failReadbackOnce) fs.writeFileSync(process.env.FAKE_READBACK,'1');
+} else if(args[0]==='issue'&&args[1]==='comment') {
+  const mode=JSON.parse(fs.readFileSync(process.env.FAKE_MODE,'utf8'));
+  if(mode.failCommentOnce&&!fs.existsSync(process.env.FAKE_MARKER)){fs.writeFileSync(process.env.FAKE_MARKER,'1');console.error('HTTP 429');process.exit(1);}
+  const value=comments();value.push({body:args[args.indexOf('--body')+1],author:actor()});fs.writeFileSync(process.env.FAKE_COMMENTS,JSON.stringify(value));
+} else {console.error('unexpected gh '+args.join(' '));process.exit(9);}
+`, { encoding: 'utf8', mode: 0o755 });
+
+    const environment = { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}`,
+      FAKE_ISSUE: issueFile, FAKE_COMMENTS: commentsFile, FAKE_ACTOR: actorFile,
+      FAKE_MODE: modeFile, FAKE_MARKER: markerFile, FAKE_READBACK: readbackFile };
+    const start = (owner) => spawnSync(process.execPath, [path.join(__dirname, 'claude-task.cjs'), 'start',
+      '--issue=81', '--stage=prd', `--owner=${owner}`, '--claim=true', '--owner-version=0',
+      '--candidate-pr=129', '--risk=R1', '--owned=scripts/claude-task.cjs'],
+    { cwd: repo, encoding: 'utf8', env: environment });
+    const statePath = runGit(['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json']);
+
+    const first = start('Actor A');
+    assert.equal(first.status, 1);
+    assert.match(first.stderr, /RECOVERY_REQUIRED[\s\S]*HTTP 429/);
+    assert.equal(parseOwnerLease(JSON.parse(fs.readFileSync(issueFile)).body).version, 1);
+    const second = start('Actor A');
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(commentsFile)).filter((item) => item.body.includes('[CLAIM]')).length, 1);
+    assert.equal(JSON.parse(fs.readFileSync(statePath)).ownerSaga.reconcile, 'complete');
+
+    const handoffBody = `[HANDOFF] status=blocked\nresult: owner saga fixture\nevidence: local fake GitHub\nrisk: no production impact\nnext-owner: reviewer\ntrigger: fixed SHA\nleast-confidence: risk-v1; anchor=ref:Issue #81; uncertainty=risk:recovery\nbiggest-missing: risk-v1; anchor=name:external writer; uncertainty=unknown:concurrency`;
+    environment.FAKE_HANDOFF = handoffBody;
+    const rows = JSON.parse(fs.readFileSync(commentsFile));
+    rows.push({ body: handoffBody, author: 'actor-a' });
+    fs.writeFileSync(commentsFile, JSON.stringify(rows));
+    fs.writeFileSync(modeFile, JSON.stringify({ failReadbackOnce: true }));
+    const handoffArgs = [path.join(__dirname, 'claude-task.cjs'), 'handoff', '--status=blocked',
+      '--evidence=https://github.com/acme/coreone/issues/81#issuecomment-123'];
+    const handoffFirst = spawnSync(process.execPath, handoffArgs, { cwd: repo, encoding: 'utf8', env: environment });
+    assert.equal(handoffFirst.status, 1);
+    assert.match(handoffFirst.stderr, /RECOVERY_REQUIRED[\s\S]*EOF/i);
+    const handoffSecond = spawnSync(process.execPath, handoffArgs, { cwd: repo, encoding: 'utf8', env: environment });
+    assert.equal(handoffSecond.status, 0, handoffSecond.stderr);
+    assert.equal(fs.existsSync(statePath), false);
+    assert.deepEqual(parseOwnerLease(JSON.parse(fs.readFileSync(issueFile)).body), {
+      ownerId: 'unassigned', leaseState: 'unassigned', candidatePr: null,
+      version: 2, nextTrigger: 'handoff:blocked', legacy: false,
+    });
+
+    fs.writeFileSync(actorFile, 'actor-b');
+    const competing = start('Actor B');
+    assert.equal(competing.status, 1);
+    assert.match(competing.stderr, /owner\/version.*漂移/);
+    assert.equal(JSON.parse(fs.readFileSync(commentsFile)).filter((item) => item.body.includes('[CLAIM]')).length, 1);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+runOwnerLeaseSagaFixture();
 assert.equal(parseOwnerBlock('no block'), null);
 
 const issueFormBody = `### PRD 固定基线\n\ndocs/prd/a.md@abcdef1\n\n### RQ → AC 映射\n\nRQ-01 -> AC-01, AC-02`;
