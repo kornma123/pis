@@ -33,7 +33,7 @@ let failed = 0;
 let externalPassed = 0;
 let externalFailed = 0;
 const failedScenarios = [];
-const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
+const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
 const EXPECTED_SCENARIOS = Object.freeze([
   'queued terminal is not visible proof',
   'different app terminal handle fails closed',
@@ -81,7 +81,7 @@ const EXPECTED_SCENARIOS = Object.freeze([
 const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible review rejects an unbound or mutable target contract',
   'external visible fixed SHA review separates and proves all four evidence layers',
-  'external visible review rejects a writable Claude permission mode',
+  'external visible review enforces the PM-selected bypass Claude permission mode',
   'external visible review invalidates a changed candidate before terminal input',
   'external visible fixed SHA requires clean bytes before input and acceptance',
   'external visible review rejects a different Terminal TTY identity',
@@ -107,7 +107,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'dedicated Terminal claim binds one new window to executed proof',
   'dedicated visible launch rejects an expired or absent live claim proof',
   'macOS Terminal TUI submit waits before the same-tab empty submit',
-  'external visible launch rejects a process that dropped plan mode or session flags',
+  'external visible launch rejects a process that dropped bypass mode or session flags',
 ]);
 
 async function check(name, fn) {
@@ -178,7 +178,7 @@ function externalRequest(overrides = {}) {
       claudeSessionId: '11111111-1111-4111-8111-111111111111',
       expectedClaudeVersion: '2.1.220',
       expectedEffort: 'max',
-      expectedPermissionMode: 'plan',
+      expectedPermissionMode: 'bypassPermissions',
       repositoryFullName: 'kornma123/pis',
       reviewTargetSha: target,
       skillName: 'coreone',
@@ -249,11 +249,11 @@ function makeExternalRuntime(options = {}) {
   };
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
-  const permissionMode = options.permissionMode || 'plan';
+  const permissionMode = options.permissionMode || 'bypassPermissions';
   const tty = options.tty || '/dev/ttys000';
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
   let processCommand = options.processCommand ||
-    '/usr/local/bin/claude.exe --effort max --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
+    '/usr/local/bin/claude.exe --effort max --permission-mode bypassPermissions --session-id 11111111-1111-4111-8111-111111111111';
   const claim = options.claim || makeExternalClaim();
   const liveClaimProof = `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
   const snapshot = () => ({
@@ -321,7 +321,7 @@ function makeExternalRuntime(options = {}) {
         stats.resumeCommands.push(input);
         launched = true;
         processCommand =
-          '/usr/local/bin/claude.exe --effort max --permission-mode plan --resume 11111111-1111-4111-8111-111111111111';
+          '/usr/local/bin/claude.exe --effort max --permission-mode bypassPermissions --resume 11111111-1111-4111-8111-111111111111';
       }
       if (purpose === 'visibility-proof' && launched) {
         const canary = input.match(/COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+/)?.[0];
@@ -2722,7 +2722,7 @@ module.exports = {
     assert.equal(result.supervisionMode, 'external-visible-readonly');
     assert.equal(result.codexTaskBindingRequired, false);
     assert.equal(result.externalSession.reviewTargetSha, 'c'.repeat(40));
-    assert.equal(result.externalSession.permissionMode, 'plan');
+    assert.equal(result.externalSession.permissionMode, 'bypassPermissions');
     assert.equal(result.externalSession.transcriptSha256, 'e'.repeat(64));
     assert.deepEqual(
       Object.fromEntries(
@@ -2737,14 +2737,28 @@ module.exports = {
     );
   });
 
-  await checkExternal('external visible review rejects a writable Claude permission mode', async () => {
-    const result = await runExternalCase({
-      runtimeOptions: { permissionMode: 'bypassPermissions' },
+  await checkExternal('external visible review enforces the PM-selected bypass Claude permission mode', async () => {
+    const accepted = await runExternalCase({
+      requestOverrides: {
+        externalVisibleTerminal: { expectedPermissionMode: 'bypassPermissions' },
+      },
+      runtimeOptions: {
+        permissionMode: 'bypassPermissions',
+        processCommand: '/usr/local/bin/claude.exe --effort max --permission-mode bypassPermissions --session-id 11111111-1111-4111-8111-111111111111',
+      },
     });
-    assert.equal(result.status, 'BLOCKED');
-    assert.equal(result.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
+    assert.equal(accepted.status, 'COMPLETE');
+
+    const rejected = await runExternalCase({
+      runtimeOptions: {
+        permissionMode: 'plan',
+        processCommand: '/usr/local/bin/claude.exe --effort max --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111',
+      },
+    });
+    assert.equal(rejected.status, 'BLOCKED');
+    assert.equal(rejected.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
     assert.notEqual(
-      result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
+      rejected.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
       'PASS',
     );
   });
@@ -3087,7 +3101,7 @@ module.exports = {
     );
     assert.equal(helpResult.status, 0, helpResult.stderr);
     assert.match(helpResult.stdout, /external-visible-readonly/);
-    assert.match(helpResult.stdout, /permission-mode=plan/);
+    assert.match(helpResult.stdout, /permission-mode=bypassPermissions/);
   });
 
   await checkExternal('external startup separates lightweight handshake from Skill review delivery', async () => {
@@ -3459,12 +3473,13 @@ module.exports = {
     ]);
   });
 
-    await checkExternal('external visible launch rejects a process that dropped plan mode or session flags', async () => {
+    await checkExternal('external visible launch rejects a process that dropped bypass mode or session flags', async () => {
       const commands = [
         'claude printf accidental-shell-buffer',
-        'claude --effort max --permission-mode plan --fork-session --resume 11111111-1111-4111-8111-111111111111',
-        'claude --effort max --permission-mode plan --bg --session-id 11111111-1111-4111-8111-111111111111',
-        'claude --effort max --permission-mode plan --print --session-id 11111111-1111-4111-8111-111111111111',
+        'claude --effort max --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111',
+        'claude --effort max --permission-mode bypassPermissions --fork-session --resume 11111111-1111-4111-8111-111111111111',
+        'claude --effort max --permission-mode bypassPermissions --bg --session-id 11111111-1111-4111-8111-111111111111',
+        'claude --effort max --permission-mode bypassPermissions --print --session-id 11111111-1111-4111-8111-111111111111',
       ];
       for (const processCommand of commands) {
         const result = await runExternalCase({

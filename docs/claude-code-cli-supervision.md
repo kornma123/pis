@@ -4,7 +4,7 @@
 <!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
 <!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs test-harness=scripts/claude-cli-supervisor.test-harness.cjs production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
-<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
+<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
@@ -74,7 +74,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
     "claudeSessionId": "预生成 UUID",
     "expectedClaudeVersion": "现场批准的精确版本",
     "expectedEffort": "现场批准且 transcript 可证明的 effort",
-    "expectedPermissionMode": "plan",
+    "expectedPermissionMode": "bypassPermissions",
     "repositoryFullName": "owner/repo",
     "reviewTargetSha": "完整 40 位 candidate SHA",
     "skillName": "coreone",
@@ -113,8 +113,8 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 | `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；每次写入前都重新聚焦并现场复核同一 app/window id/selected TTY，不能把前一阶段的前台状态跨等待复用。macOS `activate()` 与 frontmost 回读可异步生效；只可对 `frontmost/frontWindow` 做有界等待，window/TTY/title/selected tab 任一不同仍立即失败关闭；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；外部模式必须长轮询 transcript 变化或结构化问题/终态，无新记录时不得空转忙循环。返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
 | `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本探针；Claude 路径必须从当前可见 shell 继承的 `PATH` 解析，不得另起 login shell 导致另一套 PATH。恢复时用进程与 transcript 元数据复核实际 executable、version、effort、permission mode、cwd/session。`claude --effort <值> --version` 只证明版本命令接受参数，**不能**证明实际会话采用该 effort |
-| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。外部模式先发送不调用 Skill、不展开复核的轻量 digest/challenge 握手；收到同 session ACK 后再显式 `/<skill>` 投递带唯一 marker 的复核消息，并以 transcript 中的 user message 证明已注入。Skill/权威链的长读取属于后续复核，不得与启动握手合并后再用一分钟误杀 |
-| `resumeClaude` | 复用原 window/TTY/session id、同一幂等键、原 `--effort` 与 `permission-mode=plan`；进程仍在时回报 `alreadyRunning`，否则在原可见窗口用原 id `--resume`，不得新建、fork 或重复投递会话 |
+| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 PM 选择的 `permission-mode=bypassPermissions`。外部模式先发送不调用 Skill、不展开复核的轻量 digest/challenge 握手；收到同 session ACK 后再显式 `/<skill>` 投递带唯一 marker 的复核消息，并以 transcript 中的 user message 证明已注入。Skill/权威链的长读取属于后续复核，不得与启动握手合并后再用一分钟误杀 |
+| `resumeClaude` | 复用原 window/TTY/session id、同一幂等键、原 `--effort` 与 `permission-mode=bypassPermissions`；进程仍在时回报 `alreadyRunning`，否则在原可见窗口用原 id `--resume`，不得新建、fork 或重复投递会话 |
 
 同一 task 的 `run/answer/ack-stop` 受 Git 外独占 lease 保护，状态文件每次写入做 revision CAS；并发控制者只能得到 `SUPERVISOR_LEASE_HELD`，不得第二次 create/launch。应用或任务异常退出后，仅在 owner PID 已确定不存在（`ESRCH`）时自动回收旧 lease；owner 仍存活或证据不可解析时继续失败关闭。
 
@@ -182,7 +182,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 - Claude 版本按严格 SemVer 比较；prerelease 低于相同 core 的稳定版（例如 `2.0.0-beta.1 < 2.0.0`），不得只比较前三段数字后放行。
 - SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
 - effort 不在本机 `claude --help` 声明集合、启动后实际值不同或 transcript 无法确认时停止派单；不得因 `claude --effort <值> --version` 返回 0 就认定支持，也不得静默降级。
-- 外部模式必须使用 `permission-mode=plan`；已有 session 为 `bypassPermissions`、`acceptEdits` 或其他可写模式时拒绝复用。它只允许只读固定 SHA 复核；GitHub 写入/评论、Issue/PR 修改、权限/身份变化、合并、发布、部署和对外发送均保留人工关卡。
+- 外部模式必须使用 PM 选择的 `permission-mode=bypassPermissions`；已有 session 为 `plan`、`acceptEdits` 或其他不匹配模式时拒绝复用。该模式优先减少 CLI 许可往返，但它**不是工具层只读沙箱**：只读固定 SHA 复核仍由启动前/完成后 clean、candidate/target/TOCTOU、typed question、writer wrapper 与 GitHub 回读共同 fail-closed；发现任何本地或远端写入即使 CLI 未询问也必须 BLOCK。GitHub 写入/评论、Issue/PR 修改、权限/身份变化、合并、发布、部署和对外发送仍保留人工关卡。
 - 必须在已经通过 canary 的同一可见终端以前台交互方式启动或复用。不得使用工具 PTY、`--print`、`--bg`、`nohup`、shell 后台符号、输出重定向、另开隐藏 Claude 或隐藏子任务代替。不得因 System Events 键盘注入缺 Accessibility 权限就要求用户改权限；使用 Terminal 自身的窗口/tab `do script` 接口，具体提交行为由 challenge 回读验收。
 - 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
 
@@ -217,7 +217,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 ## 6. 恢复、完成与停止
 
 - 桌面终端附着或同句柄写入能力丢失时，立即暂停派单并回到 canary 证明；不得因“看不到输出”就改用隐藏工具 PTY 或新开重复会话。证明恢复后才用原 session id 续接，并先消费断开期间全部新增输出。
-- 只有进程查询证明原前台 Claude 已不存在，才能记录“进程退出”；慢、暂无 transcript 或存在 Claude 原生后台 agent 都不等于退出。保存最后输出并确认没有另一个同任务前台进程后，在原 window/TTY 用原 session id、`max` effort 与 `permission-mode=plan` 续接，不投递重复 prompt。
+- 只有进程查询证明原前台 Claude 已不存在，才能记录“进程退出”；慢、暂无 transcript 或存在 Claude 原生后台 agent 都不等于退出。保存最后输出并确认没有另一个同任务前台进程后，在原 window/TTY 用原 session id、`max` effort 与 `permission-mode=bypassPermissions` 续接，不投递重复 prompt。
 - 只有 Claude 已给出终态、输出经过两次稳定读取、控制者完成事实闸、没有未答问题，并且当前目标确实无安全的范围内下一步时，才停止监督并向用户交付。
 - 持久化 `COMPLETE` 不是永久通行证：每次 `run` 都要重新核对 threadId、终端绑定、branch/gitdir、HEAD/tree、working status 与新鲜事实闸；任一变化转 `STALE_COMPLETION`/`BLOCKED`，不得直接早退。只读 `status` 不得复用旧成功，必须降级为等待新一次 `run` 复核的 `BLOCKED`。thread 变化只允许未来具备显式授权 handoff 的宿主路径；当前实现无该路径，故一律拒绝。
 - `COMPLETE` 只表示本会话目标完成，不自动授权提交、push、开 PR、标记 Ready、合并、部署、发布或关闭 Issue；这些动作继续按共用契约分别取证和授权。

@@ -335,7 +335,7 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
   )) failures.push('claudeSessionId');
   if (!parseVersion(normalized.expectedClaudeVersion)) failures.push('expectedClaudeVersion');
   if (!EXTERNAL_VISIBLE_EFFORTS.has(normalized.expectedEffort)) failures.push('expectedEffort');
-  if (normalized.expectedPermissionMode !== 'plan') failures.push('expectedPermissionMode');
+  if (normalized.expectedPermissionMode !== 'bypassPermissions') failures.push('expectedPermissionMode');
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized.repositoryFullName)) {
     failures.push('repositoryFullName');
   }
@@ -1222,7 +1222,7 @@ async function probeClaude(adapter, request, state, options) {
   if (external) {
     const contract = request.externalVisibleTerminal;
     const externalFailures = [];
-    if (probe.permissionMode !== 'plan') externalFailures.push('permissionMode');
+    if (probe.permissionMode !== 'bypassPermissions') externalFailures.push('permissionMode');
     if (probe.reviewTargetSha !== contract.reviewTargetSha) {
       externalFailures.push('reviewTargetSha');
     }
@@ -1383,7 +1383,7 @@ async function launchOrResume(adapter, request, state, options) {
       result.skillInvoked !== true ||
       result.skillSha256 !== contract.skillSha256 ||
       result.reviewTargetSha !== contract.reviewTargetSha ||
-      result.permissionMode !== 'plan' ||
+      result.permissionMode !== 'bypassPermissions' ||
       result.promptChallengeAccepted !== true ||
       result.reviewPromptTranscriptBound !== true
     ) {
@@ -3116,7 +3116,7 @@ sessionId, and terminalGeneration for native-task-bound mode. That bridge is not
 integrated yet, so native run/answer/ack-stop fail closed with
 TERMINAL_VISIBILITY_UNPROVEN. external-visible-readonly uses the built-in macOS
 Terminal visible-window adapter and requires a complete fixed-SHA request contract,
-permission-mode=plan, four independent evidence layers, and no GitHub/write/
+permission-mode=bypassPermissions, four independent evidence layers, and no GitHub/write/
 merge/release/deploy authority. Automatic launch requires a fresh claim from a
 new dedicated frontmost Terminal window; opaque existing tabs are never used as
 automatic launch targets. A user-prepared visible Claude session can instead use
@@ -4600,7 +4600,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       if (
         snapshot.metadata.cwd !== request.cwd ||
         snapshot.metadata.effort !== binding.expectedEffort ||
-        snapshot.metadata.permissionMode !== 'plan' ||
+        snapshot.metadata.permissionMode !== 'bypassPermissions' ||
         snapshot.metadata.claudeVersion !== binding.expectedClaudeVersion
       ) {
         throw new SupervisorFailure(
