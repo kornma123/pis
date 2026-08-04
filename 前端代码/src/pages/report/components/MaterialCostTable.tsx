@@ -72,7 +72,10 @@ export function MaterialCostTable({
                 </tr>
               ) : (
                 data.map(m => {
-                  const changeValue = m.changeRate ?? Math.round(Math.random() * 30 - 15)
+                  // fail-closed：仅接受有限数字；null / 缺失 / malformed 一律显示「不可计算」，
+                  // 不得伪造 0、随机数或趋势（同比/环比真实公式未冻结，见 Issue #31）。
+                  const changeRate =
+                    typeof m.changeRate === 'number' && Number.isFinite(m.changeRate) ? m.changeRate : null
                   return (
                     <tr key={m.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-semibold text-gray-900">{m.name}</td>
@@ -80,7 +83,13 @@ export function MaterialCostTable({
                       <td className="px-4 py-3 text-right text-gray-600">{m.consumption.toLocaleString()} {m.consumptionUnit}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(m.totalCost)}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{(m.ratio * 100).toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-right"><ChangeBadge value={changeValue} /></td>
+                      <td data-testid="material-change-rate" className="px-4 py-3 text-right">
+                        {changeRate === null ? (
+                          <span className="text-xs text-gray-400">不可计算</span>
+                        ) : (
+                          <ChangeBadge value={changeRate} />
+                        )}
+                      </td>
                     </tr>
                   )
                 })

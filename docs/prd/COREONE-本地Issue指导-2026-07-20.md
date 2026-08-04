@@ -284,7 +284,7 @@
 | LOC-027 | 证据双轴机器化 | `BLOCKED_DEPENDENCY` | 首批只圈定已有水印/声明的 4 条碰钱路由，派工前冻结 exact route list；API 与导出携带 typed `evidence_strength`、`authority_status`，两轴独立验证且未知 fail-closed。在此之前继续水印/声明列，不把 C/Candidate 升权威 |
 | LOC-028 | #131/#132 构建纪律死线 | `DEFERRED_PRD` | headless route 归位与 consumer whitelist 按 PRD 2026-10 死线执行；以目标 SHA gate 输出为准，不在本文硬编码动态计数 |
 | LOC-029 | 库位容量写入门 | `REMOTE_INTEGRATION_R2_APPROVED_AWAITING_MASTER` | 原 candidate=`5b77a9b…` 的 R2 FAIL 与中间 `bf00beb…` 的 evidence gap 均已保留;最终 evidence-only successor=`2b6b09ced1b8b4e2e9fd509b9bd15b0573f04c7b` 经独立 Windows Node22 R2 APPROVE,并以 merge=`cd43b590d2330034fe314b05190e05a4ab5dc4ee` 推到远端 integration。该分支相对 master 仍 3 behind/97 ahead,所以 Issue 保持 open;先建立最新 master combined base,再决定合并。 |
-| LOC-030 | 成本报表同期变化真值 | `DEFERRED_PRD` | Mac C8 的“前端 Math.random 兜底”在 d144 未复现：后端当前返回 `changeRate:null`，前端显示不可计算；因此不得按旧触发开 bug。先决定同比/环比期间、缺基期语义和 denominator，再实现真实变化率；同步修正 PRD/FRS 中“恒 0”旧描述并加跨期守恒测试 |
+| LOC-030 | 成本报表同期变化真值 | `DEFERRED_PRD` | d144 复核结论有误：前端 `Math.random` 兜底在 master 真实存在（`changeRate` 为 null/缺失时伪造随机百分比，刷新即变），已由 [#31](https://github.com/kornma123/pis/issues/31) 删除并 fail-closed 显示「不可计算」（合法 0 显示 0），不得再按"未复现"结案。真实同比/环比期间、缺基期语义和 denominator 仍未冻结，本票不猜公式；后续先冻结跨期合同再实现真实变化率，同步修正 PRD/FRS 中"恒 0"旧描述并加跨期守恒测试 |
 | LOC-031 | 预警主动生成与通知闭环 | `REMOTE_CANDIDATE_AWAITING_K3_R2` | Phase A candidate=`e97902b88d52501010be669192742f1052d3eb5b` 已推到 `codex/loc-031a-alert-scheduler`,exact 5-path delta;author Node22 focused/build 仅作交接证据,K3 独立 R2 尚未回传结论。Phase A 只覆盖启动即扫描+定时扫描、幂等/重入/重试/stop/脱敏日志;外部短信/邮件/企业微信/浏览器推送和多实例 leader election 仍在 Later,不得把本候选叫完整通知闭环。 |
 | LOC-032 | 登出后 token 失效 | `READY_DECIDED_SERIAL_AFTER_LOC022` | 去重已完成：旧 #201 固定 head `82bfead81ae84ee98dfca980c7993ee951e72fe2` 仅修改 FRS-01 文档，不含 token invalidation，故不是重复。权威方案选 **per-user token version**：access/refresh 均携带版本并在每次认证/刷新时与 DB 当前版本精确比较；认证后的 logout 原子递增版本，令该用户全部既有 access/refresh token 立即稳定 401；短寿命+rotation 不能满足立即失效，黑名单不作为首选。若未来需要“仅退出当前设备”，另立 session-id 表方案，不在本票暗改。与 LOC-022（旧 #128/#150）共享 `auth.ts`，必须串行；验收含登录前后基线、logout/refresh 并发、重复 logout、DB/事务失败零部分、旧 token 覆盖所有受保护 API、denial audit 脱敏及 migration/legacy 默认值 |
 | LOC-033 | 供应商 code 删除后复用合同 | `DEFERRED_PRD` | 从原 FRS 大票拆出：先决定软删 code 是否永久保留、可恢复复用还是经审计重分配；创建/恢复/删除在同一 canonical 规则下执行，禁止靠 SQLite unique/trim 偶然行为决定业务语义 |
@@ -300,7 +300,7 @@
 | C5 固定成本池真实金额+认账 | `LOC-026` | 与既有外部证据票重复；补 2026-08-31 节点和“非代码票”说明 |
 | C6 删除关联校验 | `LOC-025` | 从原泛化 FRS 债中拆成可派工策略矩阵 |
 | C7 库位容量 | `LOC-029` | 新产品债，独立于 Equipment 容量/折旧域 |
-| C8 changeRate 假值 | `LOC-030` | 改写后保留；d144 已是 null/不可计算，旧“随机兜底”触发不成立，待定义真实跨期合同 |
+| C8 changeRate 假值 | `LOC-030` | 改写后保留；随机兜底真实存在（非 d144 所称"未复现"），已由 #31 移除并 fail-closed 为「不可计算」；真实跨期合同仍待定义 |
 | C9 预警无主动触发 | `LOC-031` | 新窄范围产品债；不恢复已剔除的旧 Alerts 大任务 |
 | C10 登出不失效 | `LOC-032` | #201 已证为纯文档非重复；采用 per-user token version，排在 LOC-022 的 `auth.ts` owner 释放后串行实施 |
 

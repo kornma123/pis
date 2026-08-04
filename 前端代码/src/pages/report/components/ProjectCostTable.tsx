@@ -130,7 +130,10 @@ export function ProjectCostTable({
             ) : (
               data.map((p, idx) => {
                 const rank = (page - 1) * pageSize + idx + 1
-                const changeValue = p.changeRate ?? Math.round(Math.random() * 20 - 10)
+                // fail-closed：仅接受有限数字；null / 缺失 / malformed 一律显示「不可计算」，
+                // 不得伪造 0、随机数或趋势（同比/环比真实公式未冻结，见 Issue #31）。
+                const changeRate =
+                  typeof p.changeRate === 'number' && Number.isFinite(p.changeRate) ? p.changeRate : null
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3"><RankBadge rank={rank} /></td>
@@ -140,7 +143,13 @@ export function ProjectCostTable({
                     <td className="px-4 py-3 text-right text-gray-600">{(p.ratio * 100).toFixed(1)}%</td>
                     <td className="px-4 py-3 text-right text-gray-600">{p.sampleCount.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-gray-600">{formatCurrency(p.unitCost)}</td>
-                    <td className="px-4 py-3 text-right"><ChangeBadge value={changeValue} /></td>
+                    <td data-testid="project-change-rate" className="px-4 py-3 text-right">
+                      {changeRate === null ? (
+                        <span className="text-xs text-gray-400">不可计算</span>
+                      ) : (
+                        <ChangeBadge value={changeRate} />
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => onOpenDetail(p)}

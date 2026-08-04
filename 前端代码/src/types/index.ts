@@ -378,7 +378,8 @@ export interface ProjectCostReport {
     unitCost: number
     totalCost: number
     ratio: number
-    changeRate?: number
+    // 后端真实可返回 null（公式未冻结期）或省略该键；组件必须 fail-closed（Issue #31）
+    changeRate?: number | null
     changeDirection?: 'up' | 'down'
   }>
 }
@@ -392,7 +393,8 @@ export interface MaterialCostReport {
     consumptionUnit: string
     totalCost: number
     ratio: number
-    changeRate?: number
+    // 后端真实可返回 null（公式未冻结期）或省略该键；组件必须 fail-closed（Issue #31）
+    changeRate?: number | null
     changeDirection?: 'up' | 'down'
   }>
   trend: Array<{
