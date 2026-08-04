@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 const assert = require('node:assert/strict')
+const childProcess = require('node:child_process')
 const {
+  createGhTransport,
   LiveFactReadError,
   resolveDependencyGraph,
   resolveLiveFacts,
@@ -651,6 +653,21 @@ test('pagination ambiguity and dependency read errors never become an empty PASS
   assert.equal(incomplete.pagination.complete, false)
   assert.equal(forbidden.verdict, 'UNVERIFIED')
   assert.equal(missing.verdict, 'UNVERIFIED')
+})
+
+test('native transport rejects hasNextPage without a cursor', () => {
+  const original = childProcess.execFileSync
+  childProcess.execFileSync = () => JSON.stringify({ data: { repository: { issue: {
+    number: 124, state: 'OPEN', updatedAt: '2026-08-04T04:00:00Z', body: '',
+    blockedBy: { nodes: [], pageInfo: { hasNextPage: true, endCursor: null } },
+    blocking: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+  } } } })
+  try {
+    assert.throws(() => createGhTransport().issueDependencies({ repository: REPO, number: 124 }),
+      (error) => error instanceof LiveFactReadError && error.code === 'SCHEMA_INVALID')
+  } finally {
+    childProcess.execFileSync = original
+  }
 })
 
 test('typed fallback marker beside native authority fails with one reconcile owner', () => {

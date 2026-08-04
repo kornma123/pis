@@ -96,6 +96,9 @@ function createGhTransport() {
           result[key].push(...connection.nodes.map((item) => item?.number))
           const next = connection.pageInfo.hasNextPage
           const cursor = connection.pageInfo.endCursor
+          if (next && !cursor) {
+            throw new LiveFactReadError('SCHEMA_INVALID', `${key} hasNextPage requires endCursor`)
+          }
           if (key === 'blockedBy') {
             blockedDone = !next || !cursor
             blockedAfter = next ? cursor : null
