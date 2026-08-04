@@ -9,6 +9,7 @@ const {
   collectVisibleFields,
   isWeakReflection,
   stripIgnoredMarkdown,
+  validatePrBody,
 } = require('./issue-handoff/check-pr-body.cjs');
 
 const MODIFY_STAGES = new Set(['prd', 'mockup', 'implementation', 'acceptance']);
@@ -198,6 +199,23 @@ function assertClaudeImplementationOwnership(stage, owned, exception = null) {
     `Claude Code 不得直接认领${inspection.reason}；后端实现 owner=Codex。` +
     '无法拆分的在途混合/例外任务必须提供绑定活动 Issue 与 owned scope 的 PM ownership exception。',
   );
+}
+
+function assertTaskImplementationOwnership(owner, stage, owned, exception = null) {
+  if (!/^Codex(?:$|\s|[（(])/.test(String(owner || '').trim())) {
+    return assertClaudeImplementationOwnership(stage, owned, exception);
+  }
+  if (!['implementation', 'acceptance'].includes(String(stage || '').toLowerCase())) return;
+  if (exception) throw new Error('Codex ownership 不使用 Claude Code ownership exception。');
+  const patterns = (Array.isArray(owned) ? owned : []).map(toPosix);
+  const hasFrontend = patterns.some((item) => item === '前端代码' || item.startsWith('前端代码/'));
+  const hasBackend = patterns.some((item) => item === '后端代码' || item.startsWith('后端代码/'));
+  const hasBroad = patterns.some((item) => !item || ['.', '*', '**', '**/*', '*/**'].includes(item) ||
+    item.startsWith('../') || item.startsWith('/'));
+  if (hasBroad) throw new Error('Codex 不得认领全仓或不可判定的宽范围。');
+  if (hasFrontend) {
+    throw new Error(`Codex 不得认领${hasBackend ? '前后端混合' : '前端'}实现范围；前端 owner=Claude Code。`);
+  }
 }
 
 function parseOwnershipExceptionMarker(body) {
@@ -1523,7 +1541,7 @@ function commandStart(argv) {
       owned: flags.owned,
     });
   }
-  assertClaudeImplementationOwnership(stage, flags.owned, ownershipException);
+  assertTaskImplementationOwnership(owner, stage, flags.owned, ownershipException);
 
   let prd = null;
   let mockup = null;
@@ -3684,7 +3702,57 @@ function isSafeGhRead(tokens) {
   return false;
 }
 
-function assertSafeGhCommand(tokens, state) {
+function commandOptionValues(tokens, name) {
+  const values = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = String(tokens[index]);
+    if (token === name) {
+      const value = tokens[index + 1];
+      if (value == null || String(value).startsWith('--')) throw new Error(`${name} 缺少值。`);
+      values.push(String(value));
+      index += 1;
+    } else if (token.startsWith(`${name}=`)) values.push(token.slice(name.length + 1));
+  }
+  return values;
+}
+
+function materializePrCreateCommand(tokens, body) {
+  const output = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = String(tokens[index]);
+    if (['--body', '--body-file'].includes(token)) { index += 1; continue; }
+    if (token.startsWith('--body=') || token.startsWith('--body-file=')) continue;
+    output.push(tokens[index]);
+  }
+  return [...output, '--body', body];
+}
+
+function validatedPrCreateBody(rest, state, root) {
+  if (rest.some((token) => ['-H', '-B', '-b', '-F', '-f', '-T', '-w']
+    .some((alias) => String(token) === alias || String(token).startsWith(alias)))) {
+    throw new Error('PR create 禁止影响 head/base/body 的短选项别名。');
+  }
+  if (rest.some((token) => /^--(?:fill|fill-first|fill-verbose|template|web)(?:=|$)/.test(token))) {
+    throw new Error('PR create 必须提供唯一、确定的最终 body bytes。');
+  }
+  const inline = commandOptionValues(rest, '--body');
+  const files = commandOptionValues(rest, '--body-file');
+  if (inline.length + files.length !== 1) throw new Error('PR create body 必须且只能确定一次。');
+  let body = inline[0];
+  if (files.length) {
+    const file = path.resolve(root, files[0]);
+    if (!fs.statSync(file).isFile()) throw new Error('PR --body-file 必须指向普通文件。');
+    body = fs.readFileSync(file, 'utf8');
+  }
+  const result = validatePrBody(body);
+  if (!result.ok) throw new Error(`PR body 合同未通过：${result.errors[0] || 'unknown error'}`);
+  if (!result.issueNumbers.includes(state.issue)) {
+    throw new Error(`PR body 未绑定活动 Issue #${state.issue}。`);
+  }
+  return body;
+}
+
+function assertSafeGhCommand(tokens, state, root = process.cwd()) {
   const area = String(tokens[1] || '').toLowerCase();
   const action = String(tokens[2] || '').toLowerCase();
   const rest = tokens.slice(3);
@@ -3707,12 +3775,12 @@ function assertSafeGhCommand(tokens, state) {
   if (area === 'pr') {
     if (['view', 'list', 'checks', 'status', 'diff'].includes(action)) return;
     if (state.mode === 'governed' && action === 'create') {
-      const headIndex = rest.findIndex((value) => value === '--head' || value.startsWith('--head='));
-      const head = headIndex < 0 ? null : rest[headIndex].includes('=') ? rest[headIndex].split('=').slice(1).join('=') : rest[headIndex + 1];
-      const baseIndex = rest.findIndex((value) => value === '--base' || value.startsWith('--base='));
-      const base = baseIndex < 0 ? null : rest[baseIndex].includes('=') ? rest[baseIndex].split('=').slice(1).join('=') : rest[baseIndex + 1];
-      if (head && head !== state.branch) throw new Error(`PR --head 必须是活动分支 ${state.branch}。`);
-      if (base && !/^(?:master|main)$/.test(base)) throw new Error('PR --base 必须是 master/main。');
+      const heads = commandOptionValues(rest, '--head');
+      const bases = commandOptionValues(rest, '--base');
+      if (heads.length !== 1 || heads[0] !== state.branch) throw new Error(`PR --head 必须精确为活动分支 ${state.branch}。`);
+      if (bases.length !== 1 || !/^(?:master|main)$/.test(bases[0])) throw new Error('PR --base 必须精确为 master/main。');
+      state.prCreateBody = validatedPrCreateBody(rest, state, root);
+      state.prCreateBodySha256 = sha256(state.prCreateBody);
       state.forceLiveCheck = true;
       state.githubWrite = true;
       return;
@@ -4797,7 +4865,7 @@ function assertShellCommandSafety(command, state = null, root = process.cwd(), c
       }
     } else if (['gh', 'gh.exe'].includes(executable)) {
       if (!state && isSafeGhRead(tokens)) continue;
-      assertSafeGhCommand(tokens, check);
+      assertSafeGhCommand(tokens, check, root);
     } else if (['node', 'node.exe'].includes(executable)) {
       if (!state || nodeRequestsGovernedAction(tokens)) {
         assertSafeNodeCommand(tokens, root, cwd, { hasActiveState: Boolean(state) });
@@ -4893,7 +4961,7 @@ function commandGitHubWrite(argv) {
   if (executable === 'git' || executable === 'git.exe') {
     assertSafeGitCommand(['git', ...tokens.slice(1)], check);
   } else {
-    assertSafeGhCommand(['gh', ...tokens.slice(1)], check);
+    assertSafeGhCommand(['gh', ...tokens.slice(1)], check, root);
   }
   if (!check.githubWrite) {
     throw new Error('github-write 只能执行被治理规则识别为写入的 git/gh 命令。');
@@ -4901,7 +4969,8 @@ function commandGitHubWrite(argv) {
   assertActiveState(root, active, { force: check.forceLiveCheck });
   assertOwnedChanges(root, active.state);
   const command = executable.startsWith('git') ? 'git' : 'gh';
-  const result = runSerializedRemoteWrite(root, command, tokens.slice(1), {
+  const writeTokens = check.prCreateBody == null ? tokens : materializePrCreateCommand(tokens, check.prCreateBody);
+  const result = runSerializedRemoteWrite(root, command, writeTokens.slice(1), {
     timeout: 120_000,
   });
   if (result.stdout) process.stdout.write(`${result.stdout}\n`);
@@ -5202,6 +5271,7 @@ if (require.main === module) main();
 
 module.exports = {
   assertClaudeImplementationOwnership,
+  assertTaskImplementationOwnership,
   beginIssueCreationLedger,
   assertSafeGhCommand,
   assertSafeGitCommand,
@@ -5227,6 +5297,7 @@ module.exports = {
   parseOwnerLease,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  materializePrCreateCommand,
   replaceOwnerLease,
   resolveIssueCreationManifestPath,
   shouldBlockStop,
