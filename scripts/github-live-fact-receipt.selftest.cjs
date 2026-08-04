@@ -475,7 +475,10 @@ test('compare response base stays bound to the requested target SHA', () => {
 })
 
 test('anchor decision emits seven distinct typed anchors with provenance', () => {
-  const receipt = resolveAnchor(makeTransport())
+  const receipt = resolveAnchor(makeTransport(), {
+    leaseState: 'future-lease-state',
+    overlapDisposition: 'future-overlap-state',
+  })
   assert.equal(receipt.verdict, 'PASS')
   assert.equal(receipt.anchors.candidateHeadSha.value, HEAD)
   assert.equal(receipt.anchors.reviewedTreeSha.value, TREE)
@@ -489,8 +492,8 @@ test('anchor decision emits seven distinct typed anchors with provenance', () =>
   assert.deepEqual(receipt.relationships, {
     successorPr: 127,
     supersedesPr: 80,
-    candidateLease: { state: 'active', authority: 'GOV-008' },
-    overlapDisposition: { state: 'superseded', authority: 'GOV-010' },
+    candidateLease: { state: 'future-lease-state', authority: 'Issue#122' },
+    overlapDisposition: { state: 'future-overlap-state', authority: 'Issue#124' },
   })
 })
 

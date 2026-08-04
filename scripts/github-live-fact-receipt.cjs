@@ -6,8 +6,6 @@ const RECEIPT_VERSION = 'coreone-github-live-fact-receipt/v1'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const DECISIONS = new Set(['anchor', 'claim', 'handoff', 'merge', 'preflight', 'review'])
-const LEASE_STATES = new Set(['active', 'historical', 'superseded'])
-const OVERLAP_STATES = new Set(['blocked', 'clear', 'superseded'])
 
 class LiveFactReadError extends Error {
   constructor(code, message, status = null) {
@@ -118,9 +116,9 @@ function normalizeOptions(options) {
       throw new Error(`${name} must be a positive integer`)
     }
   }
-  if (leaseState != null && !LEASE_STATES.has(leaseState)) throw new Error('lease state is invalid')
-  if (overlapDisposition != null && !OVERLAP_STATES.has(overlapDisposition)) {
-    throw new Error('overlap disposition is invalid')
+  if (leaseState != null && !leaseState) throw new Error('lease state must not be empty')
+  if (overlapDisposition != null && !overlapDisposition) {
+    throw new Error('overlap disposition must not be empty')
   }
   if (decision === 'merge' && (prNumber == null || candidateSha == null)) {
     throw new Error('merge decision requires PR and candidate SHA')
@@ -573,8 +571,8 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       receipt.relationships = {
         successorPr: input.successorPr,
         supersedesPr: input.supersedesPr,
-        candidateLease: { state: input.leaseState, authority: 'GOV-008' },
-        overlapDisposition: { state: input.overlapDisposition, authority: 'GOV-010' },
+        candidateLease: { state: input.leaseState, authority: 'Issue#122' },
+        overlapDisposition: { state: input.overlapDisposition, authority: 'Issue#124' },
       }
 
       if (!candidateReachable) {
