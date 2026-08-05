@@ -58,6 +58,12 @@ function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly strin
   return true
 }
 
+// Issue #106：未知/未映射异常统一收敛为稳定、脱敏的 500——不依赖 NODE_ENV、绝不复用
+// err.message/err.stack，防 SQL/堆栈/内部路径透出；具名领域错误仍走各自稳定码。
+function unknownErrorResponse(res: any): void {
+  error(res, '服务器内部错误，请稍后重试', 'INTERNAL_ERROR', 500)
+}
+
 // R3-3：被取代旧代的补收单彻底冻结是既定口径（trigger 层 RAISE(ABORT,...) 硬冻结），
 // 但该稳定信号不能透成被掩码的裸 500——映射为可诊断的 409 稳定码；其余未知错误仍走 500。
 function errorSupplementLifecycle(res: any, err: any): void {
@@ -65,7 +71,7 @@ function errorSupplementLifecycle(res: any, err: any): void {
     error(res, '该补收单属于已被取代的旧对账代次，已彻底冻结', 'SUPPLEMENT_GENERATION_BINDING_MISMATCH', 409)
     return
   }
-  error(res, err.message)
+  unknownErrorResponse(res)
 }
 
 function lifecycleAuditMetadata(
@@ -95,7 +101,7 @@ const lifecycleError = (res: any, err: unknown): void => {
     error(res, err.message, err.code, err.status)
     return
   }
-  error(res, err instanceof Error ? err.message : 'account reconciliation failed')
+  unknownErrorResponse(res)
 }
 
 // LOC-005 authoritative generation-bound lifecycle. These handlers are registered
@@ -240,8 +246,8 @@ router.get('/overview', (req, res) => {
       确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
     success(res, { settlementMonth, items, board, caliberRatification: splitCaliberRatification() })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -371,8 +377,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/compute', requirePe
     writeAuditLog(db, 'account_reconcile', 'compute', out.hospitalMonthId,
       { partnerId, serviceMonth, matchStatus: out.matchStatus, diffCount: out.diffCount }, operatorOf(req))
     success(res, out, '账实核对已计算')
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -416,8 +422,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/overview', (req, res
       确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
     successList(res, list, 1, list.length || 1, list.length, { board, caliberRatification: splitCaliberRatification() })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -467,8 +473,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/workbench', (req, re
       caseHints,
       caliberRatification: splitCaliberRatification(), // confirmedLabRevenue 拆分派生 → 带「口径未认账」水印
     })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -525,8 +531,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id
       .run(operatorOf(req), confirmed, hm.id)
     writeAuditLog(db, 'account_reconcile', 'complete', hm.id, { partnerId: hm.partner_id, serviceMonth: hm.service_month, confirmedLabRevenue: confirmed }, operatorOf(req))
     success(res, { id: hm.id, status: '复核完成', confirmedLabRevenue: confirmed, caliberRatification: splitCaliberRatification() }, '复核完成')
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -543,8 +549,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id
       .run(reason, hm.id)
     writeAuditLog(db, 'account_reconcile', 'reopen', hm.id, { reason }, operatorOf(req))
     success(res, { id: hm.id, status: '待复核' }, '已重新打开')
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -572,8 +578,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/close', requirePerm
       closed.push(partnerId)
     }
     success(res, { serviceMonth, closed, skipped }, `关账完成：${closed.length} 家已关账，${skipped.length} 家挂起`)
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -590,8 +596,8 @@ if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id
       .run(reason, hm.id)
     writeAuditLog(db, 'account_reconcile', 'reopen_close', hm.id, { reason }, operatorOf(req))
     success(res, { id: hm.id, status: '复核完成' }, '已反关账')
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
@@ -624,8 +630,8 @@ router.get('/supplements', (req, res) => {
       补收率: (() => { const done = sum('已补收'); const tot = done + sum('待补收'); return tot > 0 ? done / tot : 0 })(),
     }
     successList(res, list, 1, list.length || 1, list.length, { board })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    unknownErrorResponse(res)
   }
 })
 
