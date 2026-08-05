@@ -4,6 +4,20 @@ import { toast } from 'sonner'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 const GENERIC_REQUEST_ERROR = '请求失败，请稍后重试'
+const SAFE_AXIOS_ERROR_CODES = new Set([
+  'ERR_BAD_OPTION_VALUE',
+  'ERR_BAD_OPTION',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ERR_NETWORK',
+  'ERR_FR_TOO_MANY_REDIRECTS',
+  'ERR_DEPRECATED',
+  'ERR_BAD_RESPONSE',
+  'ERR_BAD_REQUEST',
+  'ERR_CANCELED',
+  'ERR_NOT_SUPPORT',
+  'ERR_INVALID_URL',
+])
 
 /**
  * 响应拦截器（见下方）会在成功时返回 `response.data.data`，即**已解包**的业务负载。
@@ -183,7 +197,7 @@ function sanitizeAxiosErrorForDisplay(error: AxiosError): AxiosError {
   // 新建白名单 Error，避免原 AxiosError 的已缓存 stack、toJSON 或自定义可枚举字段泄漏。
   const safeError = new Error(safeMessage || GENERIC_REQUEST_ERROR) as AxiosError
   safeError.name = 'AxiosError'
-  if (typeof error.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)) {
+  if (typeof error.code === 'string' && SAFE_AXIOS_ERROR_CODES.has(error.code)) {
     safeError.code = error.code
   }
   safeError.config = safeConfig

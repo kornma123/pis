@@ -328,6 +328,7 @@ describe('request', () => {
       expect(rejected).toBeDefined()
       expect(toastError).toHaveBeenCalledWith('请求失败，请稍后重试')
       expect(rejected?.message).toBe('请求失败，请稍后重试')
+      expect(rejected?.code).toBe('ERR_BAD_RESPONSE')
       expect(rejected?.config).toEqual({ method: 'post' })
       expect(rejected?.request).toBeUndefined()
       expect(rejected?.response?.headers).toEqual({})
@@ -338,6 +339,17 @@ describe('request', () => {
       const serialized = JSON.stringify(rejected)
       for (const secret of secrets) expect(serialized).not.toContain(secret)
       expect(serialized).not.toContain('response-header-secret')
+
+      const unsafeCode = `TOKEN_${'Q'.repeat(48)}`
+      const unsafeCodeError = new actualAxios.AxiosError('Network Error', unsafeCode)
+      let unsafeCodeRejected: InstanceType<typeof actualAxios.AxiosError> | undefined
+      try {
+        await responseRejected(unsafeCodeError)
+      } catch (caught) {
+        unsafeCodeRejected = caught as InstanceType<typeof actualAxios.AxiosError>
+      }
+      expect(unsafeCodeRejected?.code).toBeUndefined()
+      expect(JSON.stringify(unsafeCodeRejected)).not.toContain(unsafeCode)
     })
   })
 })
