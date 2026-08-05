@@ -1,6 +1,7 @@
 {
   "schema_version": "pis-effect-evidence/v1",
   "task_id": "PIS-INV-G01-001-FULL-SWITCH",
+  "delivery_status": "READY_FOR_PM_GATE",
   "scope": "PIS local implementation, migration, tests, and evidence only; no Harness assessment",
   "authority": {
     "product_authority": "pm编排@8c234173d6a2a4c6361389cadd29364933d1dbd2",
@@ -9,17 +10,18 @@
   },
   "candidate": {
     "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
-    "implementation_candidate_sha": "afff326e84aba5b2af1cbe14aabd2bb638f136f0",
-    "implementation_tree_hash": "854464af58de3c6e9bf809cdf48edcebe9890206",
+    "implementation_candidate_sha": "cf15d4789aa1e25d84c1d3f9e6581df917e3610f",
+    "implementation_tree_hash": "96b99d96adc6e5cd7fbe0bc52b525158a42ca2d2",
     "evidence_subject": "The implementation commit; later evidence-only commits must not change product code"
   },
   "final_candidate_gates": {
-    "sequence": "Executed after the pending inbound complete and completed inbound cancel/delete fixes; the earlier 2007/2007 run is not candidate evidence.",
-    "full_backend_command": "pis_test_jwt=$(openssl rand -base64 48) && TZ=UTC JWT_SECRET=$pis_test_jwt npm run test:node -- --maxWorkers=1 --minWorkers=1",
-    "full_backend_result": "exit 0; 156 files passed; 2010 tests passed; duration 217.42s",
+    "sequence": "Executed after the pending inbound complete and completed inbound cancel/delete fixes, all first-round independent-review repairs, and the second-round mixed-expiry repair; the earlier 2007/2007, 2010/2010, and pre-mixed-expiry 2014/2014 runs are not final candidate evidence.",
+    "full_backend_command": "PIS_TEST_JWT_SECRET=$(openssl rand -hex 32) TZ=UTC JWT_SECRET=\"$PIS_TEST_JWT_SECRET\" npm run test:node -- --maxWorkers=1 --minWorkers=1",
+    "full_backend_result": "exit 0; 156 files passed; 2014 tests passed; duration 220.85s",
     "build_result": "npm run build: exit 0",
     "lint_result": "npm run lint: exit 0; 0 errors; 1427 inherited warnings",
-    "diff_result": "git diff --check: exit 0"
+    "diff_result": "git diff --check: exit 0",
+    "directed_review_result": "PASS on cf15d4789aa1e25d84c1d3f9e6581df917e3610f; P0/P1=0; mixed-expiry P2 fixed; prior four P1 findings did not regress; independent fixed-archive probes passed; directed focused rerun passed 2 files and 19 tests in 3.06s; no third open-ended review was performed"
   },
   "findings": [
     {
@@ -158,12 +160,96 @@
       "finding_id": "PIS-EFF-012-INDEPENDENT-REVIEW",
       "requirement_or_entry": "G5 fixed local candidate finding-first review",
       "discovered_when": "independent-review",
-      "pre_fix_reproduction": "PENDING_FIXED_CANDIDATE_REVIEW",
-      "fix_path": "PENDING_FIXED_CANDIDATE_REVIEW",
-      "post_fix_command": "PENDING_FIXED_CANDIDATE_REVIEW",
-      "post_fix_result": "PENDING_FIXED_CANDIDATE_REVIEW",
-      "escaped_author_tests": "PENDING_FIXED_CANDIDATE_REVIEW",
-      "residual_boundary": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "pre_fix_reproduction": "Independent review of afff326e84aba5b2af1cbe14aabd2bb638f136f0 returned REQUEST_CHANGES with 4 P1 and 1 P2; no P0. The actionable findings are recorded as PIS-EFF-013 through PIS-EFF-017. R2 review of 5b2986304f3d22ca96cadc0d54dfbb21ea43aa5b confirmed those five closed and P0/P1=0, then found the mixed-expiry P2 recorded as PIS-EFF-018.",
+      "fix_path": "Returned G5 to G3 for each bounded finding set, added RED counterexamples, repaired all six reviewer findings, reran focused/full gates, and fixed candidate cf15d4789aa1e25d84c1d3f9e6581df917e3610f for the PM-bounded directed closure review.",
+      "post_fix_command": "Independent read-only fixed-archive probes plus TZ=UTC JWT_SECRET=<ephemeral> npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts tests/outbound-bom-retirement.test.ts on cf15d4789aa1e25d84c1d3f9e6581df917e3610f",
+      "post_fix_result": "DIRECTED REVIEW PASS: exact SHA/tree/base matched; P0/P1=0; mixed-expiry P2 fixed; prior four P1 findings did not regress; independent probes passed; 2 files and 19 tests passed in 3.06s; no open-ended third review was performed.",
+      "escaped_author_tests": "YES_FIRST_CANDIDATE_PASSED_AUTHOR_GATES",
+      "residual_boundary": "Real databases, frontend consumers, production concurrency, and the future G2 compensation chain remain unverified and unauthorized.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-013-REVIEW-PENDING-TRANSFER",
+      "requirement_or_entry": "generic inbound PUT versus dedicated transfer ownership and 70/30 conservation",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "On afff326e, completing a pending inbound_records row with type=transfer through PUT /api/v1/inbound/:id returned 200, changed stock from 0 to 5, created only a target inbound allocation, and made no source deduction. An ordinary pending inbound could also be retagged to transfer in the request.",
+      "fix_path": "Reject existing or requested reserved inbound types before idempotency replay or planning; apply the same route-ownership boundary to generic check-deletable and cancel/delete paths.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts",
+      "post_fix_result": "PASS: 1 file, 13 tests; both pending-transfer and direct-to-transfer cases return 409 ROUTE_OWNERSHIP_VIOLATION with zero position, stock, allocation, type, or status writes. Final full backend: 156 files and 2014 tests PASS.",
+      "escaped_author_tests": "YES_ONLY_COMPLETED_TRANSFER_WAS_PREVIOUSLY_TESTED",
+      "residual_boundary": "Dedicated transfer cancellation remains in the separate G2 compensation chain boundary.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-014-REVIEW-ZERO-CAPACITY",
+      "requirement_or_entry": "known location capacity must block additions",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "POST /api/v1/locations with capacity=0 returned 201 but stored 999999 because capacity || 999999 treated zero as missing; a subsequent one-unit inbound succeeded.",
+      "fix_path": "Normalize capacity once, default only when undefined, preserve numeric zero, and pass the normalized value to the insert.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts tests/p1-12-06-locations.test.ts",
+      "post_fix_result": "PASS: zero is stored exactly and the first addition returns 422 LOCATION_CAPACITY_EXCEEDED with zero position/cache writes; related location regressions pass.",
+      "escaped_author_tests": "YES",
+      "residual_boundary": "Real-database capacity values and concurrent production writes were not accessed or load-tested.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-015-REVIEW-INVENTORY-STATUS",
+      "requirement_or_entry": "position-derived inventory read model status filters",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "GET /api/v1/inventory?status=low-stock returned 500 because HAVING was appended to a non-aggregate SELECT; expired and expiring-soon shared the malformed query shape, and low-stock still used the stock cache.",
+      "fix_path": "Move status predicates into WHERE, derive low stock from summed positions, and qualify expiry batches by positive position facts for both count and list queries.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts",
+      "post_fix_result": "PASS: low-stock, expired, and expiring-soon each return 200 and include the seeded position-backed material; final full backend passes 2014 tests.",
+      "escaped_author_tests": "YES_NO_STATUS_FILTER_COVERAGE",
+      "residual_boundary": "Frontend rendering of the position-expanded response remains outside this backend-only slice.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-016-REVIEW-CONVERSION-PRECISION",
+      "requirement_or_entry": "material packaging conversion must share the planner safe four-decimal domain",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "Creating a material with unitsPerPackage=0.00001 returned 201 and stored the value; its next inbound failed 409 INVENTORY_LEDGER_CORRUPT because the planner cannot represent five decimal places. Fresh materials DDL also accepted the poison value.",
+      "fix_path": "Reject POST/PUT conversion values outside the positive safe four-decimal range and align fresh materials DDL checks with the already strict additive-column definition.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts tests/inventory-position-schema.test.ts tests/data-1-numeric-guards.test.ts",
+      "post_fix_result": "PASS: POST and PUT return 400 INVALID_PARAMETER for 0.00001, direct fresh-schema insertion is rejected, valid numeric guards and schema migration tests pass.",
+      "escaped_author_tests": "YES",
+      "residual_boundary": "Pre-existing real databases are not rewritten in this task; direct legacy corruption continues to fail closed.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-017-REVIEW-OUTBOUND-G2-PRECEDENCE",
+      "requirement_or_entry": "completed outbound PUT stable G2 zero-write contract",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "A completed outbound PUT with items=[] returned 400 INVALID_PARAMETER before loading the record, rather than the frozen 409 COMPENSATION_CHAIN_REQUIRED contract.",
+      "fix_path": "Preserve the explicit retired-BOM type rejection, then load the record and enforce completed-state G2 before replacement-item validation.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts tests/issue-112-business-month.test.ts tests/outbound-bom-retirement.test.ts",
+      "post_fix_result": "PASS: malformed and well-shaped completed PUTs return 409 COMPENSATION_CHAIN_REQUIRED with zero writes; Issue #112 remains 9/9 and retired BOM type remains 400 INVALID_PARAMETER.",
+      "escaped_author_tests": "YES_ONLY_WELL_SHAPED_COMPLETED_PUT_WAS_TESTED",
+      "residual_boundary": "The future correction/compensation API remains outside this slice.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-018-REVIEW-MIXED-EXPIRY",
+      "requirement_or_entry": "position-derived inventory expired and expiring-soon filters must match the returned earliest live batch classification",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "On fixed candidate 5b298630, a material with one positive-position expired batch and one positive-position batch expiring in 10 days was returned by GET /api/v1/inventory?status=expiring-soon even though the same response row reported status=expired and the expired batch expiry. The added RED failed at inventory-position-routes.test.ts:422 with expected false but received true.",
+      "fix_path": "Changed both expired and expiring-soon predicates to compare the same earliest positive-position batch expiry used by the response, making the categories mutually exclusive, and retained a two-batch expired-plus-soon regression.",
+      "post_fix_command": "TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts -t 'keeps inventory status filters'; then the 2-file focused command and the final full backend command in final_candidate_gates",
+      "post_fix_result": "Targeted GREEN: 1 selected test passed; author focused GREEN: 2 files and 19 tests passed; final full backend GREEN: exit 0, 156 files and 2014 tests passed, duration 220.85s. Independent directed review on cf15d478 also passed fixed-archive probes and 2 files / 19 tests in 3.06s.",
+      "escaped_author_tests": "YES_SINGLE_BATCH_STATUS_TESTS_PASSED",
+      "residual_boundary": "Frontend presentation and timezone behavior outside the server's established date contract remain outside this backend slice.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-019-R2-STOP-RULE",
+      "requirement_or_entry": "PM-frozen R2 review stop condition",
+      "discovered_when": "orchestrator",
+      "pre_fix_reproduction": "After R2 found the mixed-expiry P2, G5 still said in progress without a bounded terminal review scope, so another open-ended review cycle could recursively expand the candidate audit.",
+      "fix_path": "Recorded the PM stop rule: on a fixed SHA, stop open-ended review once P0/P1=0, every P2 is fixed or explicitly accepted, complete gates pass, and a reviewer directly confirms the repaired P2 plus non-regression of the prior four P1 findings. No third open-ended review is permitted for this candidate.",
+      "post_fix_command": "Final full/build/lint/diff/scope gates plus independent directed closure review on cf15d478",
+      "post_fix_result": "PASS: P0/P1=0, the mixed-expiry P2 is fixed, the prior four P1 findings did not regress, complete author gates and the directed reviewer rerun passed, and open-ended review stopped. Delivery status is READY_FOR_PM_GATE.",
+      "escaped_author_tests": "NOT_APPLICABLE_PROCESS_BOUNDARY",
+      "residual_boundary": "READY_FOR_PM_GATE will not authorize GitHub writes, merge, real database migration, deployment, frontend completion, or the future G2 compensation chain.",
       "would_harness_have_blocked": "UNASSESSED_BY_PIS"
     }
   ]

@@ -12,10 +12,11 @@
 
 - **task id**: `PIS-INV-G01-001-FULL-SWITCH`
 - **owner / author**: Codex root task `PIS-INV-G01-001`
-- **reviewer**: 未参与实现的只读 reviewer，候选固定后启动
+- **reviewer**: 未参与实现的只读 reviewer；首轮对 `afff326e...` 返回 4 P1 + 1 P2，R2 对 `5b298630...` 确认原 finding 闭环并新命中 1 P2；新候选 `cf15d478...` 的 PM 限定定向收口复核已 PASS
+- **delivery status**: `READY_FOR_PM_GATE`（不等于 GitHub、merge、真实迁移或 deploy 授权）
 - **base SHA**: `e0cb8083d113ab5c9fc901fc16fb9265cf01243e`
-- **fixed implementation candidate SHA**: `afff326e84aba5b2af1cbe14aabd2bb638f136f0`
-- **fixed implementation tree hash**: `854464af58de3c6e9bf809cdf48edcebe9890206`
+- **fixed implementation candidate SHA**: `cf15d4789aa1e25d84c1d3f9e6581df917e3610f`
+- **fixed implementation tree hash**: `96b99d96adc6e5cd7fbe0bc52b525158a42ca2d2`
 - **worktree**: `/Users/maxiaoyuan/.codex/worktrees/a34c/进销存`
 - **branch**: `codex/pis-inventory-position-full-switch-20260805`
 
@@ -99,24 +100,30 @@
 | G0 | verified | — | 主 Agent | 固定 REQ-v1、live ownership、develop preflight PASS | 本 handoff | Git/GitHub/preflight；0 次重试 |
 | G1 | verified | G0 | 主 Agent | schema/backfill/FEFO/capacity/守恒 RED | tests + handoff | RED 覆盖 schema、planner、全路由、删除保护；0 次超限重试 |
 | G2 | verified | G1 | 主 Agent | schema、合成迁移器、统一计划器 GREEN | DB/service | position schema/planner focused GREEN |
-| G3 | verified | G2 | 主 Agent | 所有实际数量/位置入口接入；补偿外入口 fail closed | listed routes/tests | create + pending-complete + G2 zero-write routes GREEN |
-| G4 | verified | G3 | 主 Agent | combined machine gates 与 mutation | owned files only | focused/full/build/lint/diff + 5 mutants killed |
-| G5 | pending | G4 | 独立 reviewer | fixed local candidate finding-first review；P0/P1=0 或退回责任节点 | 只读 | 最多 2 次定向返工 |
+| G3 | verified | G2 | 主 Agent | 所有实际数量/位置入口接入；补偿外入口 fail closed | listed routes/tests | 两轮 reviewer 返工已关闭：reserved inbound、零容量、status filters 500/混合效期互斥、conversion precision、outbound G2 precedence |
+| G4 | verified | G3 | 主 Agent | combined machine gates 与 mutation | owned files only | mixed-expiry 修复后 focused/full/build/lint/diff + 5 mutants killed；full=2014 |
+| G5 | verified | G4 | 独立 reviewer | fixed local candidate 定向收口复核 | 只读 | `cf15d478...` PASS；P0/P1=0，mixed-expiry P2 已修，原 4 P1 未复活，未开放式找新问题 |
 
 ## 验证证据
 
 - **自动测试**:
   - 精确 Issue #112：`tests/issue-112-business-month.test.ts` => 1 file / 9 tests PASS；保留单位层和创建路径的上海业务月断言，唯一旧完成态 PUT 用例现在验证 `409 COMPENSATION_CHAIN_REQUIRED`、原单/position/cache 零写、零新增 `ledger_drift` 记录与调用。
   - 最终库存/G2/幂等聚焦：9 files / 67 tests PASS；含 pending 入库完成的批次与非批次路径、已完成入库取消/删除 G2 零写、FEFO、70/30、退回原 allocation 库位和材料删除保护。
-  - `pending inbound complete` 与 `completed inbound cancel/delete` 两处修复完成后，最终完整后端（CI 等价临时进程密钥，`TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1`）：exit 0，156 files / 2010 tests PASS，duration 217.42s。密钥未打印、未写文件；修复前的 2007/2007 不作为最终候选证据。此前一次未注入测试密钥的运行在模块加载阶段 fail closed，也不计 GREEN。
+  - `pending inbound complete`、`completed inbound cancel/delete`、首轮 4 P1 + 1 P2 及 R2 mixed-expiry P2 全部修复后，重新运行最终完整后端（CI 等价临时进程密钥，`TZ=UTC npm run test:node -- --maxWorkers=1 --minWorkers=1`）：**exit 0，156 files / 2014 tests PASS，duration 220.85s**。密钥未打印、未写文件；此前的 2007/2007、2010/2010 和 mixed-expiry 修复前的 2014/2014 均不作为最终候选证据。此前一次未注入测试密钥的运行在模块加载阶段 fail closed，也不计 GREEN。
+  - 首轮 reviewer 返工 focused：8 files / 77 tests PASS；route 合同 1 file / 13 tests PASS。R2 mixed-expiry RED 稳定复现 `expected false / received true`，修复后单用例 GREEN，再跑 route + BOM retirement 为 2 files / 19 tests PASS。双批证据覆盖 pending transfer/retag 零写、capacity=0、status filter 可查且 expired/expiring-soon 互斥、转换精度 API/DDL、畸形完成态 outbound PUT 409，并保留 BOM retirement 与 Issue #112。
 - **人工或真人验证**: 本轮无前端写入，UI 真跑不在授权范围。
 - **preflight / drift check**: `2026-08-05` 启动 develop preflight PASS；base/head 均为 `e0cb8083...`。实施中 scope 纠偏选择 A：精确追加 `material-delete-reference-guards.ts` 和 `inventory-position-delete-guards.test.ts`，撤回未授权的 `scripts/**` 改动。重跑 develop preflight：HEAD/origin/master 均为 `e0cb8083...`，ahead/behind=0，`excludedDirty=[]`、`foreignDirty=[]`，精确跨 worktree overlap 仅当前 worktree；总 verdict 为 WARN 而非 PASS，唯一 WARN 是实施中 17 个已声明 owned paths 正在 dirty，无 scope/authority/freshness 失败。待候选固定后再跑干净候选 gate。
 - **最终提交前 scope checkpoint**: 刷新 `origin/master` 后仍为 `e0cb8083...`，live open PR=`[]`；以 33 条精确 owned patterns（含 effect evidence 新文件、material delete guard 和 Issue #112 例外）重跑 develop preflight。总 verdict=`WARN`，唯一 WARN 是当前实现中的 32 个 owned paths 正在 dirty；branch/freshness/authority 全部 PASS，`excludedDirty=[]`、`foreignDirty=[]`，未扩大到其他主数据保护、Issue #112 或 seed script 文件。该 WARN 是候选提交前的预期状态，不冒充干净候选 PASS。
 - **固定候选干净 preflight**: 提交 `afff326e84aba5b2af1cbe14aabd2bb638f136f0` 后再次刷新 `origin/master` 并以同一精确 scope 运行 develop preflight：verdict=`PASS`，ahead=1、behind=0、worktree clean，`ownedDirty=[]`、`excludedDirty=[]`、`foreignDirty=[]`，authority/freshness/drift checks 全部 PASS。
+- **reviewer 返工 scope / 新候选 preflight**: 首轮 finding 只修改 7 个既有 owned paths；提交前 preflight=`WARN`，唯一 WARN 为这 7 个 owned dirty，`excludedDirty=[]`、`foreignDirty=[]`。固定新实现候选 `5b2986304f3d22ca96cadc0d54dfbb21ea43aa5b` 后重跑为 `PASS`，ahead=3、behind=0、worktree clean，无 WARN/FAIL。
+- **R2 P2 scope checkpoint**: 刷新 `origin/master` 后仍为 `e0cb8083...`；以 33 条精确 owned paths 运行 develop preflight，verdict=`WARN`，唯一 WARN 是候选提交前 4 个 owned dirty（两个证据文件 + `inventory-v1.1.ts` + `inventory-position-routes.test.ts`）；`excludedDirty=[]`、`foreignDirty=[]`，ahead=3、behind=0，authority/freshness/drift 全 PASS。仅两个产品路径固定为新实现候选 `cf15d4789aa1e25d84c1d3f9e6581df917e3610f`（tree `96b99d96adc6e5cd7fbe0bc52b525158a42ca2d2`）；证据文件待定向 reviewer 结论后单独固定。
+- **证据提交前 scope checkpoint**: 定向 reviewer PASS 写入后以同一 33 条 owned paths 重跑 develop preflight：HEAD=`cf15d478...`，ahead=4、behind=0，verdict=`WARN`；唯一 WARN 为本 handoff 与 effect-evidence 两个 owned docs 正在 dirty，`excludedDirty=[]`、`foreignDirty=[]`，产品代码与测试已干净。
 - **Issue #112 fixture-only scope checkpoint**: 首轮完整后端测试为 155 files / 2004 tests PASS，唯一失败是 `issue-112-business-month.test.ts` 的 3 个出库请求因旧 fixture 缺 position 而 fail closed 409；在修改该文件前已将精确路径加入上述 fixture-only exception。刷新 `origin` 后 exact overlap 扫描未发现任何现存 worktree 在该精确路径有 dirty 写入（3 个已登记但路径不存在的 prunable worktree 不视为活写者）；HEAD/origin/master 均为 `e0cb8083...`。develop preflight 总 verdict=`WARN`，唯一 WARN 是 30 个已声明 owned paths 正在 dirty；branch/freshness/authority 均 PASS，`excludedDirty=[]`、`foreignDirty=[]`。该结果不表述为整体 PASS。
 - **Issue #112 conflict resolution**: fixture-only 补齐后 exact 为 8/9，完整后端为 155 files / 2006 tests PASS；唯一红灯是既有完成态 outbound PUT 期望 200，而当前 G2 合同要求 409。PM 裁决明确完成态 material/quantity 禁止直接修改，原 update 活跃路径已被 G2 边界移除；授权范围仅该一个用例验证 409、零库存/position/原单改写及零新增 ledger_drift 记录/调用。未授权实现更新补偿链或修改其他 Issue #112 断言/文件。
 - **入口与写者静态复核**: `src` 内数量表写入只剩统一 `inventory-transactions.ts`、显式 synthetic migration 和材料创建的零缓存行；`inbound-v1.1.ts` 的两处 `UPDATE inventory` 只维护 `last_inbound_*` 元数据。未发现 `inventory_locations` 第二真值；`is_reversed` 仅出现在旧 allocation schema 检测，当前事实表无可变 reverse 标志。
-- **机器门**: 上述两处 inbound 修复后，`npm run build` exit 0；`npm run lint` exit 0（0 errors / 1427 inherited warnings）；`git diff --check` exit 0。
+- **机器门**: R2 mixed-expiry P2 修复后，`npm run build` exit 0；`npm run lint` exit 0（0 errors / 1427 inherited warnings）；`git diff --check` exit 0。
+- **独立 reviewer 实效**: `afff326e...` 首轮 verdict=`REQUEST_CHANGES`，无 P0，命中 4 P1 + 1 P2（`PIS-EFF-013..017`）。R2 对 `5b298630...` 定向确认这五项关闭，P0/P1=0，并新命中 1 P2：混合“已过期 + 30 天内到期”批次被 `expiring-soon` 查询命中，但返回行自身标记 `expired`。该 P2 的 RED/修法/GREEN 见 `PIS-EFF-018`。对新固定 `cf15d478...` 的最终定向复核为 **PASS**：SHA/tree/base 精确匹配，独立 fixed-archive 内存探针确认 mixed-expiry P2 关闭且原 4 P1 未复活，2 files / 19 tests PASS（duration 3.06s），`git diff --check e0cb808...cf15d478...` exit 0；结论 P0/P1=0、P2 已修。
+- **PM 冻结停止规则**: 固定 SHA 上 P0/P1=0、P2 已修或明确接受、完整门禁与定向复核通过即停止开放式审查。本轮定向复核仅确认 mixed-expiry P2 与前 4 P1 未复活，已 PASS 且未启动第三轮开放式找新问题；当前状态为 `READY_FOR_PM_GATE`，不等于 GitHub、merge、真实迁移或 deploy 授权。实效记录见 `PIS-EFF-019`。
 - **变异证有牙**: 5 个临时 mutant 均被 focused test 杀死并已恢复：FEFO expiry 逆序（planner 1 fail）、容量 `ceil→floor`（planner 1 fail）、调拨目标少入 0.0001（planner 2 fail）、请求批次锁定绕过（planner 1 fail）、legacy cache/batch 不一致校验关闭（schema 1 fail）。恢复后 focused/full 均 GREEN。
 - **偏离清单**: 当前无未拍方向偏离；Issue #57 GitHub 正文仍是旧窄 G1，本 handoff 记录当前 PM 指令的扩大范围，但不回写 GitHub。
 
