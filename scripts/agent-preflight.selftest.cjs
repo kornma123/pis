@@ -11,7 +11,7 @@ const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
 const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v3'
-const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=600 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=within-next-poll session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_CLI_SUPERVISOR = 'scripts/claude-cli-supervisor.cjs'
 const CLAUDE_CLI_SUPERVISOR_SELFTEST = 'scripts/claude-cli-supervisor.selftest.cjs'
@@ -27,6 +27,7 @@ const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
   'wrong cwd or worktree fails before Claude launch',
   'missing Claude CLI fails before prompt injection',
   'old Claude CLI version fails closed',
+  'poll interval below ten minutes is rejected',
   'prerelease Claude CLI does not satisfy the matching stable minimum',
   'SemVer comparison is symmetric for integers beyond Number safe range',
   'unsupported ultracode effort cannot silently downgrade',
@@ -62,7 +63,7 @@ const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
   'R0 fact gate does not accept an active contract as finished',
   'R0 fact gate accepts a verified start state followed by finish-r0 removal',
 ])
-const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = '516d59e66e9bb5f18196f3b01b71dd4d723c77e30fb27878ad5b422623889799'
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = 'd384c0d366143790b33a22ed641ec1de3099ba466ec83d9e9f6eb0563d450bde'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -230,7 +231,7 @@ function validateRequest(input) { return input; }
 module.exports = {
   ADAPTER_API_VERSION: 2,
   DEFAULT_EFFORT: 'ultracode',
-  DEFAULT_POLL_MS: 300000,
+  DEFAULT_POLL_MS: 600000,
   FAILURE,
   REQUIRED_STABLE_EOF_READS: 2,
   ackStopSupervisor,
