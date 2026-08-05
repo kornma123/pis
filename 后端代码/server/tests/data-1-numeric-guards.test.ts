@@ -63,6 +63,14 @@ function inboundSnapshot(fixture: InboundFixture) {
       SELECT id, stock, locked_stock, location_id, last_inbound_id
       FROM inventory WHERE material_id = ? ORDER BY id
     `).all(fixture.materialId),
+    positions: db.prepare(`
+      SELECT batch_id, location_id, quantity
+      FROM inventory_positions WHERE material_id = ? ORDER BY batch_id, location_id
+    `).all(fixture.materialId),
+    allocations: db.prepare(`
+      SELECT operation_kind, owner_id, batch_id, location_id, direction, quantity
+      FROM inventory_transaction_allocations WHERE material_id = ? ORDER BY id
+    `).all(fixture.materialId),
     purchaseOrder: db.prepare(`
       SELECT received_qty, status FROM purchase_orders WHERE id = ?
     `).get(fixture.purchaseOrderId),
@@ -141,7 +149,7 @@ describe('DATA-1 inbound quantity guard', () => {
     expect(inboundSnapshot(fixture)).toEqual(before)
   })
 
-  it.each(invalidQuantities)('PUT rejects quantity=%s and leaves all related tables unchanged', async (quantity) => {
+  it.each(invalidQuantities)('PUT routes completed-inbound mutation quantity=%s to G2 and leaves facts unchanged', async (quantity) => {
     const fixture = seedInboundFixture('put-invalid')
     const created = await auth(request(app).post('/api/v1/inbound')).send({
       type: 'direct',
@@ -161,12 +169,12 @@ describe('DATA-1 inbound quantity guard', () => {
 
     const response = await auth(request(app).put(`/api/v1/inbound/${created.body.data.id}`)).send({ quantity })
 
-    expect(response.status).toBe(400)
-    expect(response.body.error.code).toBe('INVALID_PARAMETER')
+    expect(response.status).toBe(409)
+    expect(response.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
     expect(inboundSnapshot(fixture)).toEqual(before)
   })
 
-  it('accepts a positive quantity on create and update without breaking stock accounting', async () => {
+  it('accepts a positive create but routes completed-inbound quantity changes to G2', async () => {
     const fixture = seedInboundFixture('positive')
     const created = await auth(request(app).post('/api/v1/inbound')).send({
       type: 'direct',
@@ -180,18 +188,22 @@ describe('DATA-1 inbound quantity guard', () => {
     expect(created.status).toBe(201)
     expect(created.body.data.quantity).toBe(5)
 
+    const before = inboundSnapshot(fixture)
     const updated = await auth(request(app).put(`/api/v1/inbound/${created.body.data.id}`)).send({ quantity: 8 })
-    expect(updated.status).toBe(200)
+    expect(updated.status).toBe(409)
+    expect(updated.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
 
     const snapshot = inboundSnapshot(fixture)
+    expect(snapshot).toEqual(before)
     expect(snapshot.inboundRecords).toHaveLength(1)
-    expect(snapshot.inboundRecords[0]).toMatchObject({ quantity: 8, status: 'completed' })
+    expect(snapshot.inboundRecords[0]).toMatchObject({ quantity: 5, status: 'completed' })
     expect(snapshot.batches).toHaveLength(1)
-    expect(snapshot.batches[0]).toMatchObject({ quantity: 8, remaining: 8, status: 1 })
+    expect(snapshot.batches[0]).toMatchObject({ quantity: 5, remaining: 5, status: 1 })
     expect(snapshot.inventory).toHaveLength(1)
-    expect(snapshot.inventory[0]).toMatchObject({ stock: 8 })
-    expect(snapshot.stockLogs).toHaveLength(2)
-    expect(snapshot.stockLogs.map((row: any) => row.quantity)).toEqual(expect.arrayContaining([5, 3]))
+    expect(snapshot.inventory[0]).toMatchObject({ stock: 5 })
+    expect(snapshot.positions).toEqual([{ batch_id: expect.any(String), location_id: fixture.locationId, quantity: 5 }])
+    expect(snapshot.allocations).toHaveLength(1)
+    expect(snapshot.stockLogs).toHaveLength(1)
   })
 })
 

@@ -12,6 +12,21 @@ const requireLocationRead = requirePermission('locations', 'R')
 // 写权限读 DB 矩阵（locations W = admin/warehouse_manager，可在角色权限页改）
 const requireLocationWrite = requirePermission('locations', 'W')
 
+function deriveUsedSlots(db: any, locationId: string): number | null {
+  const rows = db.prepare(`
+    SELECT p.quantity, m.units_per_package, m.slots_per_package
+    FROM inventory_positions p
+    JOIN materials m ON m.id = p.material_id
+    WHERE p.location_id = ? AND p.quantity > 0
+  `).all(locationId) as any[]
+  let used = 0
+  for (const row of rows) {
+    if (row.units_per_package === null || row.slots_per_package === null) return null
+    used += Math.ceil(Number(row.quantity) / Number(row.units_per_package)) * Number(row.slots_per_package)
+  }
+  return used
+}
+
 router.get('/', authenticateToken, requireLocationRead, (req, res) => {
   try {
     let { page = 1, pageSize = 20, zone, status, type } = req.query
@@ -28,10 +43,8 @@ router.get('/', authenticateToken, requireLocationRead, (req, res) => {
     const offset = (Number(page) - 1) * Number(pageSize)
     const list = db.prepare(`SELECT * FROM locations WHERE ${where} ORDER BY zone, name LIMIT ? OFFSET ?`).all(...params, Number(pageSize), offset) as any[]
 
-    // P1-06: used 派生自该库位下库存合计（inventory.location_id 关联），不再读从不被写的 locations.used 装饰列
-    const usedStmt = db.prepare('SELECT COALESCE(SUM(stock), 0) as used FROM inventory WHERE location_id = ?')
     successList(res, list.map((r: any) => {
-      const used = Number((usedStmt.get(r.id) as any)?.used || 0)
+      const used = deriveUsedSlots(db, r.id)
       return {
         id: r.id, code: r.code, name: r.name, type: r.type, parentId: r.parent_id, zone: r.zone, shelf: r.shelf, position: r.position,
         capacity: r.capacity, used, status: r.status === 1 ? 'active' : 'inactive',
@@ -69,6 +82,9 @@ router.post('/', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { name, type, parentId, zone, shelf, position, capacity } = req.body
     if (!name || !zone) { error(res, 'Name and zone required', 'INVALID_PARAMETER', 400); return }
+    if (capacity !== undefined && (!Number.isFinite(Number(capacity)) || Number(capacity) < 0)) {
+      error(res, 'Capacity must be a finite non-negative slot count', 'INVALID_PARAMETER', 400); return
+    }
     const db = getDatabase()
     const id = uuidv4()
     const finalCode = generateLocationCode(db)
@@ -96,7 +112,17 @@ router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     if (data.zone !== undefined) { fields.push('zone = ?'); params.push(data.zone) }
     if (data.shelf !== undefined) { fields.push('shelf = ?'); params.push(data.shelf) }
     if (data.position !== undefined) { fields.push('position = ?'); params.push(data.position) }
-    if (data.capacity !== undefined) { fields.push('capacity = ?'); params.push(data.capacity) }
+    if (data.capacity !== undefined) {
+      const capacity = Number(data.capacity)
+      if (!Number.isFinite(capacity) || capacity < 0) {
+        error(res, 'Capacity must be a finite non-negative slot count', 'INVALID_PARAMETER', 400); return
+      }
+      const used = deriveUsedSlots(db, id)
+      if (used !== null && used > capacity) {
+        error(res, 'Capacity is below the current derived slot use', 'LOCATION_CAPACITY_EXCEEDED', 422); return
+      }
+      fields.push('capacity = ?'); params.push(capacity)
+    }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
     if (fields.length > 0) { params.push(id); db.prepare(`UPDATE locations SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
@@ -122,17 +148,27 @@ router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     const references = db.prepare(`
       SELECT
         EXISTS(
-          SELECT 1 FROM inventory
-          WHERE location_id = ? AND COALESCE(stock, 0) > 0
-        ) AS has_stock,
+          SELECT 1 FROM inventory_positions WHERE location_id = ? AND quantity > 0
+        ) AS has_position_stock,
+        EXISTS(
+          SELECT 1 FROM inventory WHERE location_id = ? AND COALESCE(stock, 0) > 0
+        ) AS has_unmigrated_cache_stock,
         EXISTS(
           SELECT 1 FROM batches b
-          INNER JOIN inbound_records ir ON ir.id = b.inbound_id
+          JOIN inbound_records ir ON ir.id = b.inbound_id
           WHERE ir.location_id = ? AND COALESCE(b.remaining, 0) > 0
-        ) AS has_remaining_batch
-    `).get(id, id) as { has_stock: number; has_remaining_batch: number }
+        ) AS has_unmigrated_batch_stock
+    `).get(id, id, id) as {
+      has_position_stock: number
+      has_unmigrated_cache_stock: number
+      has_unmigrated_batch_stock: number
+    }
 
-    if (references.has_stock || references.has_remaining_batch) {
+    if (
+      references.has_position_stock
+      || references.has_unmigrated_cache_stock
+      || references.has_unmigrated_batch_stock
+    ) {
       db.exec('ROLLBACK')
       transactionOpen = false
       error(res, 'Location still has inventory or remaining batches', 'CONFLICT', 409)

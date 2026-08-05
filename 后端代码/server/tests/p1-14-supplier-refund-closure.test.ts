@@ -49,9 +49,10 @@ function seedReturn(id: string, status: string, refund: number): string {
     .run(id, 'SR-' + id, refund, status)
   db.prepare(`UPDATE batches SET remaining = remaining - 5 WHERE id = 'B-SR14'`).run()
   db.prepare(`UPDATE inventory SET stock = stock - 5 WHERE id = 'INV-SR14'`).run()
+  db.prepare(`UPDATE inventory_positions SET quantity = quantity - 5 WHERE id = 'POS-SR14'`).run()
   db.prepare(`INSERT INTO inventory_transaction_allocations
-    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, direction, quantity)
-    VALUES (?, 'supplier_return', ?, ?, 'MAT-SR14', 'B-SR14', 'out', 5)`)
+    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity)
+    VALUES (?, 'supplier_return', ?, ?, 'MAT-SR14', 'B-SR14', 'LOC-SR14', 'out', 5)`)
     .run(`ALLOC-${id}`, id, id)
   return id
 }
@@ -75,15 +76,19 @@ beforeAll(async () => {
   // 物料：进价（批次 inbound_price）= 10/瓶 → 数量5上界=50
   db.prepare(`INSERT INTO materials (id, code, name, unit, category_id, price, status, is_deleted)
     VALUES ('MAT-SR14', 'C-SR14', '退货试剂14', '瓶', 'CAT', 10, 1, 0)`).run()
+  db.prepare(`INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES ('LOC-SR14', 'LOC-SR14', '退货库位14', 'shelf', 'A', 1)`).run()
   db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES ('INV-SR14', 'MAT-SR14', 50)`).run()
   db.prepare(`INSERT INTO inbound_records
     (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount, location_id, operator, status)
     VALUES ('IN-SR14', 'IN-SR14', 'purchase', 'MAT-SR14', 'B-SR14', 'BN-SR14', 50, '瓶', 10, 500, 'LOC-SR14', 'test', 'completed')`).run()
   db.prepare(`INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, status)
     VALUES ('B-SR14', 'MAT-SR14', 'BN-SR14', 50, 50, 'IN-SR14', 10, 1)`).run()
+  db.prepare(`INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+    VALUES ('POS-SR14', 'MAT-SR14', 'B-SR14', 'LOC-SR14', 50)`).run()
   db.prepare(`INSERT INTO inventory_transaction_allocations
-    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, direction, quantity)
-    VALUES ('ALLOC-IN-SR14', 'inbound', 'IN-SR14', 'IN-SR14', 'MAT-SR14', 'B-SR14', 'in', 50)`).run()
+    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity)
+    VALUES ('ALLOC-IN-SR14', 'inbound', 'IN-SR14', 'IN-SR14', 'MAT-SR14', 'B-SR14', 'LOC-SR14', 'in', 50)`).run()
 
   seedUser('U-SR14-FIN', 'sr14fin', 'finance')
   seedUser('U-SR14-WM', 'sr14wm', 'warehouse_manager')

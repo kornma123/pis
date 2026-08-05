@@ -41,6 +41,12 @@ function seedMaterial(stock = 10, batches?: Array<{ id: string; quantity: number
       `IN-${row.id}`,
       row.remaining > 0 ? 1 : 0,
     )
+    if (row.remaining > 0) {
+      db.prepare(`
+        INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+        VALUES (?, ?, ?, 'LOC-D2', ?)
+      `).run(`POS-${row.id}`, materialId, row.id, row.remaining)
+    }
   }
   return { materialId, batchId: rows[0]?.id ?? null }
 }
@@ -54,7 +60,8 @@ function snapshot(materialId: string) {
     returns: db.prepare('SELECT COUNT(*) c FROM return_records WHERE material_id = ?').get(materialId),
     scraps: db.prepare('SELECT COUNT(*) c FROM scrap_records WHERE material_id = ?').get(materialId),
     supplierReturns: db.prepare('SELECT COUNT(*) c FROM supplier_returns WHERE material_id = ?').get(materialId),
-    allocations: db.prepare('SELECT operation_kind, owner_id, batch_id, direction, quantity, is_reversed FROM inventory_transaction_allocations WHERE material_id = ? ORDER BY operation_kind, owner_id, batch_id').all(materialId),
+    positions: db.prepare('SELECT batch_id, location_id, quantity FROM inventory_positions WHERE material_id = ? ORDER BY batch_id, location_id').all(materialId),
+    allocations: db.prepare('SELECT operation_kind, owner_id, batch_id, location_id, direction, quantity FROM inventory_transaction_allocations WHERE material_id = ? ORDER BY operation_kind, owner_id, batch_id').all(materialId),
     logs: db.prepare('SELECT type, quantity, before_stock, after_stock, related_type FROM stock_logs WHERE material_id = ? ORDER BY created_at, id').all(materialId),
   }
 }
@@ -89,12 +96,18 @@ beforeEach(() => {
     DELETE FROM outbound_items;
     DELETE FROM outbound_records;
     DELETE FROM inbound_records;
+    DELETE FROM inventory_positions;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;
     DELETE FROM material_categories;
+    DELETE FROM locations;
   `)
   db.prepare("INSERT INTO material_categories (id, code, name, level) VALUES ('CAT-D2', 'CAT-D2', 'DATA-2', 1)").run()
+  db.prepare(`
+    INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES ('LOC-D2', 'LOC-D2', 'DATA-2', 'shelf', 'A', 1)
+  `).run()
 })
 
 describe('DATA-2 strict numeric input semantics', () => {
@@ -150,9 +163,9 @@ describe('DATA-2 LOC-001 transaction guards', () => {
       allocations: [{
         operation_kind: 'inbound',
         owner_id: first.body.data.id,
+        location_id: 'LOC-D2',
         direction: 'in',
         quantity: 2.5,
-        is_reversed: 0,
       }],
     })
   })
@@ -172,7 +185,7 @@ describe('DATA-2 LOC-001 transaction guards', () => {
     expect(snapshot(materialId)).toEqual(before)
   })
 
-  it('never falls back from an insufficient explicitly selected batch', async () => {
+  it('rejects any explicitly selected batch before automatic FEFO planning', async () => {
     const batches = [
       { id: 'D2-PIN', quantity: 1, remaining: 1, expiry: '2030-01-01' },
       { id: 'D2-OTHER', quantity: 9, remaining: 9, expiry: '2031-01-01' },
@@ -183,8 +196,8 @@ describe('DATA-2 LOC-001 transaction guards', () => {
       type: 'direct',
       items: [{ materialId, batchId: 'D2-PIN', quantity: 2 }],
     })
-    expect(response.status).toBe(422)
-    expect(response.body.error.code).toBe('BATCH_STOCK_INSUFFICIENT')
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('FEFO_OVERRIDE_FORBIDDEN')
     expect(snapshot(materialId)).toEqual(before)
   })
 
@@ -218,7 +231,7 @@ describe('DATA-2 LOC-001 transaction guards', () => {
     expect(snapshot(materialId)).toEqual(beforeRejected)
   })
 
-  it('uses FEFO for scrap and restores exactly those persisted allocations', async () => {
+  it('uses FEFO for scrap and routes cancellation into the G2 compensation chain', async () => {
     const batches = [
       { id: 'D2-LATE', quantity: 5, remaining: 5, expiry: '2031-01-01' },
       { id: 'D2-FIRST', quantity: 2, remaining: 2, expiry: '2030-01-01' },
@@ -239,15 +252,16 @@ describe('DATA-2 LOC-001 transaction guards', () => {
       { batch_id: 'D2-LATE', quantity: 2 },
     ])
     const removed = await request(app).delete(`/api/v1/scraps/${created.body.data.id}`)
-    expect(removed.status).toBe(200)
-    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(7)
+    expect(removed.status).toBe(409)
+    expect(removed.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(3)
     expect(db.prepare('SELECT id, remaining FROM batches WHERE material_id = ? ORDER BY id').all(materialId)).toEqual([
-      { id: 'D2-FIRST', remaining: 2 },
-      { id: 'D2-LATE', remaining: 5 },
+      { id: 'D2-FIRST', remaining: 0 },
+      { id: 'D2-LATE', remaining: 3 },
     ])
   })
 
-  it('replays a cancellation idempotency result without a second restore or log', async () => {
+  it('replays the same G2 cancellation refusal without a restore or log', async () => {
     const { materialId } = seedMaterial(5)
     const created = await request(app).post('/api/v1/scraps').send({
       materialId,
@@ -261,7 +275,9 @@ describe('DATA-2 LOC-001 transaction guards', () => {
     const replay = await request(app).delete(`/api/v1/scraps/${created.body.data.id}`)
       .set('Idempotency-Key', 'D2-SCRAP-DELETE')
       .send({})
-    expect(replay.status).toBe(200)
+    expect(first.status).toBe(409)
+    expect(first.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect(replay.status).toBe(409)
     expect(replay.body).toEqual(first.body)
     expect(snapshot(materialId)).toEqual(afterFirst)
   })
@@ -302,7 +318,7 @@ describe('DATA-2 LOC-001 transaction guards', () => {
     expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(10)
   })
 
-  it('persists supplier-return FEFO facts and restores them on delete', async () => {
+  it('persists supplier-return FEFO facts and routes delete into G2 compensation', async () => {
     const { materialId } = seedMaterial(10)
     const created = await request(app).post('/api/v1/supplier-returns').send({
       materialId,
@@ -313,7 +329,8 @@ describe('DATA-2 LOC-001 transaction guards', () => {
     expect(created.status).toBe(201)
     expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(8)
     const removed = await request(app).delete(`/api/v1/supplier-returns/${created.body.data.id}`)
-    expect(removed.status).toBe(200)
-    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(10)
+    expect(removed.status).toBe(409)
+    expect(removed.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(8)
   })
 })

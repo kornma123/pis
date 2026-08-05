@@ -33,6 +33,7 @@ export function findLedgerDriftMaterials(db: any, onlyPositive = false): LedgerD
     FROM inventory i
     JOIN materials m ON m.id = i.material_id AND m.is_deleted = 0
     LEFT JOIN batches b ON b.material_id = i.material_id
+    WHERE m.batch_managed = 1
     GROUP BY i.material_id, m.code, m.name, i.stock
     HAVING ABS(COALESCE(i.stock, 0) - batchRemaining) > 0.0001
   `).all() as any[]
@@ -156,9 +157,9 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
   }))
 
   const invalidLocations = db.prepare(`
-    SELECT l.id, l.code, l.name, l.status, l.is_deleted, SUM(il.stock) as stock
+    SELECT l.id, l.code, l.name, l.status, l.is_deleted, SUM(il.quantity) as stock
     FROM locations l
-    JOIN inventory_locations il ON il.location_id = l.id AND il.stock > 0
+    JOIN inventory_positions il ON il.location_id = l.id AND il.quantity > 0
     WHERE l.status <> 1 OR l.is_deleted <> 0
     GROUP BY l.id, l.code, l.name, l.status, l.is_deleted
   `).all() as any[]
@@ -185,6 +186,7 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
     FROM inventory i
     JOIN materials m ON m.id = i.material_id AND m.is_deleted = 0
     LEFT JOIN batches b ON b.material_id = i.material_id
+    WHERE m.batch_managed = 1
     GROUP BY i.material_id, m.code, m.name, i.stock
     HAVING ABS(COALESCE(i.stock, 0) - batch_remaining) > 0.0001
   `).all() as any[]
@@ -247,11 +249,11 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
   }))
 
   const negativeLocationStocks = db.prepare(`
-    SELECT il.id, il.material_id, il.location_id, il.stock, m.code as material_code, m.name as material_name, l.code as location_code, l.name as location_name
-    FROM inventory_locations il
+    SELECT il.id, il.material_id, il.location_id, il.quantity as stock, m.code as material_code, m.name as material_name, l.code as location_code, l.name as location_name
+    FROM inventory_positions il
     JOIN materials m ON m.id = il.material_id AND m.is_deleted = 0
     LEFT JOIN locations l ON l.id = il.location_id
-    WHERE COALESCE(il.stock, 0) < -0.0001
+    WHERE COALESCE(il.quantity, 0) < -0.0001
   `).all() as any[]
   negativeLocationStocks.forEach(row => addIssue({
     code: 'LOCATION_NEGATIVE_STOCK',
@@ -270,10 +272,10 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
   }))
 
   const locationMismatches = db.prepare(`
-    SELECT i.material_id, m.code, m.name, i.stock, COALESCE(SUM(il.stock), 0) as location_stock
+    SELECT i.material_id, m.code, m.name, i.stock, COALESCE(SUM(il.quantity), 0) as location_stock
     FROM inventory i
     JOIN materials m ON m.id = i.material_id AND m.is_deleted = 0
-    LEFT JOIN inventory_locations il ON il.material_id = i.material_id
+    LEFT JOIN inventory_positions il ON il.material_id = i.material_id
     GROUP BY i.material_id, m.code, m.name, i.stock
     HAVING ABS(COALESCE(i.stock, 0) - COALESCE(location_stock, 0)) > 0.0001
   `).all() as any[]
@@ -316,12 +318,12 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
   }))
 
   const locationStocksWithoutInventory = db.prepare(`
-    SELECT il.id, il.material_id, il.location_id, il.stock, m.code as material_code, m.name as material_name, l.code as location_code, l.name as location_name
-    FROM inventory_locations il
+    SELECT il.id, il.material_id, il.location_id, il.quantity as stock, m.code as material_code, m.name as material_name, l.code as location_code, l.name as location_name
+    FROM inventory_positions il
     JOIN materials m ON m.id = il.material_id AND m.is_deleted = 0
     LEFT JOIN inventory i ON i.material_id = il.material_id
     LEFT JOIN locations l ON l.id = il.location_id
-    WHERE COALESCE(il.stock, 0) > 0.0001
+    WHERE COALESCE(il.quantity, 0) > 0.0001
       AND i.material_id IS NULL
   `).all() as any[]
   locationStocksWithoutInventory.forEach(row => addIssue({

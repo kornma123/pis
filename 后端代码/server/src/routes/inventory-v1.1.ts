@@ -16,12 +16,15 @@ router.get('/', (req, res) => {
     pageSize = Math.max(1, Math.min(200, Number(pageSize) || 20))
     const db = getDatabase()
 
-    let where = "m.is_deleted = 0 AND i.stock > 0"
+    let where = "m.is_deleted = 0 AND EXISTS (SELECT 1 FROM inventory_positions px WHERE px.material_id = i.material_id AND px.quantity > 0)"
     const params: any[] = []
 
     if (keyword) { where += ' AND (m.name LIKE ? OR m.code LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
     if (categoryId) { where += ' AND m.category_id = ?'; params.push(categoryId) }
-    if (locationId) { where += ' AND i.location_id = ?'; params.push(locationId) }
+    if (locationId) {
+      where += ' AND EXISTS (SELECT 1 FROM inventory_positions px WHERE px.material_id = i.material_id AND px.location_id = ? AND px.quantity > 0)'
+      params.push(locationId)
+    }
 
     let having = ''
     if (status === 'low-stock') {
@@ -45,16 +48,15 @@ router.get('/', (req, res) => {
 
     const sql = `
       SELECT
-        i.material_id, i.stock, i.location_id,
+        i.material_id,
+        (SELECT SUM(px.quantity) FROM inventory_positions px WHERE px.material_id = i.material_id) AS stock,
         m.code, m.name, m.spec, m.unit, m.min_stock, m.max_stock,
         m.category_id, m.supplier_id,
         s.name as supplier_name,
-        l.name as location_name,
         ${getBatchSubQuery('batch_no')} as batch_no,
         ${getBatchSubQuery('expiry_date')} as expiry
       FROM inventory i
       JOIN materials m ON i.material_id = m.id AND m.is_deleted = 0
-      LEFT JOIN locations l ON i.location_id = l.id AND l.is_deleted = 0
       LEFT JOIN suppliers s ON m.supplier_id = s.id AND s.is_deleted = 0
       WHERE ${where}
       ${having}
@@ -69,6 +71,16 @@ router.get('/', (req, res) => {
       const stock = Number(row.stock) || 0
       const minStock = Number(row.min_stock) || 0
       const expiry = row.expiry
+      const positions = db.prepare(`
+        SELECT p.batch_id, b.batch_no, p.location_id, l.name AS location_name, p.quantity
+        FROM inventory_positions p
+        LEFT JOIN batches b ON b.id = p.batch_id
+        JOIN locations l ON l.id = p.location_id AND l.is_deleted = 0
+        WHERE p.material_id = ? AND p.quantity > 0
+        ORDER BY COALESCE(b.expiry_date, '9999-12-31'), b.created_at,
+          COALESCE(b.batch_no, ''), p.location_id
+      `).all(row.material_id) as any[]
+      const uniqueLocationIds = [...new Set(positions.map(position => position.location_id))]
 
       if (stock <= 0) {
         status = 'out-of-stock'
@@ -95,8 +107,15 @@ router.get('/', (req, res) => {
         minStock,
         maxStock: row.max_stock,
         availableStock: stock,
-        locationId: row.location_id,
-        locationName: row.location_name || '-',
+        locationId: uniqueLocationIds.length === 1 ? uniqueLocationIds[0] : null,
+        locationName: uniqueLocationIds.length === 1 ? positions[0].location_name : '-',
+        positions: positions.map(position => ({
+          batchId: position.batch_id,
+          batchNo: position.batch_no,
+          locationId: position.location_id,
+          locationName: position.location_name,
+          quantity: position.quantity,
+        })),
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
         status,
@@ -134,21 +153,26 @@ router.get('/stats', (_req, res) => {
         END) as expired
       FROM (
         SELECT
-          i.stock,
+          (SELECT SUM(px.quantity) FROM inventory_positions px WHERE px.material_id = i.material_id) AS stock,
           m.min_stock,
           ${getBatchSubQuery('expiry_date')} as expiry
         FROM inventory i
         JOIN materials m ON i.material_id = m.id
-        WHERE m.is_deleted = 0 AND i.stock > 0
+        WHERE m.is_deleted = 0
+          AND EXISTS (SELECT 1 FROM inventory_positions px WHERE px.material_id = i.material_id AND px.quantity > 0)
       ) t
     `).get() as any
 
     const totalMaterials = (db.prepare('SELECT COUNT(*) as c FROM materials WHERE is_deleted = 0').get() as any)?.c || 0
 
     const totalStockValue = (db.prepare(`
-      SELECT SUM(i.stock * COALESCE(m.price, 0)) as v
-      FROM inventory i
-      JOIN materials m ON i.material_id = m.id
+      SELECT SUM(position_totals.stock * COALESCE(m.price, 0)) as v
+      FROM (
+        SELECT material_id, SUM(quantity) AS stock
+        FROM inventory_positions
+        GROUP BY material_id
+      ) position_totals
+      JOIN materials m ON position_totals.material_id = m.id
       WHERE m.is_deleted = 0
     `).get() as any)?.v || 0
 

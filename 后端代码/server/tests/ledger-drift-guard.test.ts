@@ -45,8 +45,15 @@ function seed(opts: { stock: number; materialPrice?: number; batchPrice?: number
   if (opts.batchPrice !== null && opts.batchPrice !== undefined) {
     const status = opts.batchStatus ?? 1
     const remaining = opts.batchRemaining ?? opts.stock
+    const batchId = `bat-${s}`
     db.prepare('INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(`bat-${s}`, matId, `B-${s}`, opts.stock, remaining, `ib-${s}`, opts.batchPrice, supId, status)
+      .run(batchId, matId, `B-${s}`, opts.stock, remaining, `ib-${s}`, opts.batchPrice, supId, status)
+    if (status === 1 && remaining > 0) {
+      db.prepare(`
+        INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(`pos-${s}`, matId, batchId, locId, remaining)
+    }
   }
   return matId
 }

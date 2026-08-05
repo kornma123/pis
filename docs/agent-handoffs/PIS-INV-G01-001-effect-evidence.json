@@ -1,0 +1,170 @@
+{
+  "schema_version": "pis-effect-evidence/v1",
+  "task_id": "PIS-INV-G01-001-FULL-SWITCH",
+  "scope": "PIS local implementation, migration, tests, and evidence only; no Harness assessment",
+  "authority": {
+    "product_authority": "pm编排@8c234173d6a2a4c6361389cadd29364933d1dbd2",
+    "requirement_handoff_sha256": "b1c066b7eb637362471fc9cf33ad6bb0637a09bdc1288436f66f32ffa338a8ac",
+    "gap_audit": "pm编排@0d9e32198ba1fe34fcd590a868ea659386c0d9b9"
+  },
+  "candidate": {
+    "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
+    "implementation_candidate_sha": "PENDING_LOCAL_COMMIT",
+    "implementation_tree_hash": "PENDING_LOCAL_COMMIT",
+    "evidence_subject": "The implementation commit; later evidence-only commits must not change product code"
+  },
+  "final_candidate_gates": {
+    "sequence": "Executed after the pending inbound complete and completed inbound cancel/delete fixes; the earlier 2007/2007 run is not candidate evidence.",
+    "full_backend_command": "pis_test_jwt=$(openssl rand -base64 48) && TZ=UTC JWT_SECRET=$pis_test_jwt npm run test:node -- --maxWorkers=1 --minWorkers=1",
+    "full_backend_result": "exit 0; 156 files passed; 2010 tests passed; duration 217.42s",
+    "build_result": "npm run build: exit 0",
+    "lint_result": "npm run lint: exit 0; 0 errors; 1427 inherited warnings",
+    "diff_result": "git diff --check: exit 0"
+  },
+  "findings": [
+    {
+      "finding_id": "PIS-EFF-001-MATERIAL-DELETE-SCOPE",
+      "requirement_or_entry": "owned scope / material DELETE guard",
+      "discovered_when": "orchestrator",
+      "pre_fix_reproduction": "Orchestrator scope checkpoint found src/utils/material-delete-reference-guards.ts in the working diff while the handoff did not own that exact file.",
+      "fix_path": "Chose option A: added only that utility and tests/inventory-position-delete-guards.test.ts to owned scope; no other master-data guard files were added.",
+      "post_fix_command": "TZ=UTC npm test -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-delete-guards.test.ts",
+      "post_fix_result": "PASS: 1 file, 2 tests; exact overlap found no other dirty writer; develop preflight was WARN only because declared owned files were dirty, with excludedDirty=[] and foreignDirty=[].",
+      "escaped_author_tests": "NOT_APPLICABLE_SCOPE_CONTROL",
+      "residual_boundary": "Only non-zero inventory_positions were added to the existing material delete reference guard; no other master-data guards are in scope.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-002-SEED-SCRIPT-SCOPE",
+      "requirement_or_entry": "excluded scripts/** ownership boundary",
+      "discovered_when": "orchestrator",
+      "pre_fix_reproduction": "A transient implementation attempt touched excluded seed script paths. The exact transient patch was not retained after the scope correction, so this record does not invent line-level evidence.",
+      "fix_path": "Restored all seed scripts and moved acceptance-seed compatibility into the owned position planner/schema path.",
+      "post_fix_command": "git status --short -- '后端代码/server/scripts' && TZ=UTC npm test -- tests/inventory-dev-seed-contract.test.ts",
+      "post_fix_result": "PASS: no dirty script path; development seed contract passed and does not create a second quantity truth.",
+      "escaped_author_tests": "NOT_APPLICABLE_SCOPE_CONTROL",
+      "residual_boundary": "scripts/** remains excluded; historical utility scripts are not declared runtime quantity APIs.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-003-ISSUE112-G2-CONFLICT",
+      "requirement_or_entry": "Issue #112 fixture-only exception / completed outbound PUT",
+      "discovered_when": "full-test",
+      "pre_fix_reproduction": "After location/position fixtures were added, the exact file was 8/9 and the full backend was 155 files with 2006 passing tests; the only failure expected HTTP 200 from a completed outbound PUT while the frozen G2 contract returned 409.",
+      "fix_path": "After explicit PM decision, changed only the one completed-state update test to assert 409 COMPENSATION_CHAIN_REQUIRED, zero original-order/cache/position writes, and zero new ledger_drift record/call. Unit-level and create-path Shanghai business-month assertions were preserved.",
+      "post_fix_command": "TZ=UTC JWT_SECRET=<ephemeral> npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/issue-112-business-month.test.ts",
+      "post_fix_result": "PASS: 1 file, 9 tests; final full backend also passed 156 files and 2010 tests.",
+      "escaped_author_tests": "YES_UNTIL_CROSS_DOMAIN_FULL_TEST",
+      "residual_boundary": "No other Issue #112 file changed; the future correction/compensation workflow remains outside this slice.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-004-PENDING-INBOUND-LOCATION",
+      "requirement_or_entry": "PUT /api/v1/inbound/:id pending to completed",
+      "discovered_when": "static-scan",
+      "pre_fix_reproduction": "New route RED expected 200 but received 400 because planBatchDeltas was called without locationId; the manual allocation payload also had no location. A second RED showed the non-batch pending path could not complete without manufacturing a batch.",
+      "fix_path": "Loaded and rechecked material batch policy, passed the explicit target location into the batch plan, used plan.allocations as the persisted fact source, and routed non-batch completion through planPositionAdditions with batch_id NULL.",
+      "post_fix_command": "TZ=UTC JWT_SECRET=<ephemeral> npm run test:node -- --maxWorkers=1 --minWorkers=1 tests/inventory-position-routes.test.ts tests/data-2-transaction-numeric-guards.test.ts tests/idempotency.test.ts tests/inventory-transaction-conservation.test.ts",
+      "post_fix_result": "PASS: 4 files, 32 tests; final route file contains 9 passing tests and final full backend passed 2010 tests.",
+      "escaped_author_tests": "YES_FIRST_FULL_SUITE_PASSED_WITHOUT_THIS_PATH",
+      "residual_boundary": "Only legacy pending records are mutable to completed/cancelled; already completed receipts remain immutable without G2 compensation.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-005-COMPLETED-INBOUND-CANCEL",
+      "requirement_or_entry": "POST /api/v1/inbound/:id/cancel and DELETE /api/v1/inbound/:id",
+      "discovered_when": "static-scan",
+      "pre_fix_reproduction": "New route RED expected 409 but received 400: the obsolete inverse path happened to fail because the new planner required a location, rather than enforcing the frozen G2 product boundary.",
+      "fix_path": "Added an explicit completed-state COMPENSATION_CHAIN_REQUIRED boundary before idempotency replay and physically removed the old completed-inbound inverse mutation branch; pending-record deletion remains transactionally supported.",
+      "post_fix_command": "npm test -- tests/inventory-position-routes.test.ts tests/data-2-transaction-numeric-guards.test.ts",
+      "post_fix_result": "PASS: 2 files, 25 tests; assertions prove 409 plus unchanged record, cache, and positions for both cancel and delete.",
+      "escaped_author_tests": "YES_EXISTING_TESTS_ACCEPTED_AN_ACCIDENTAL_400",
+      "residual_boundary": "A real append-only compensation event chain is a separate G2 delivery.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-006-JWT-ENVIRONMENT",
+      "requirement_or_entry": "full backend Vitest environment",
+      "discovered_when": "full-test",
+      "pre_fix_reproduction": "Running npm test without JWT_SECRET caused collection/import failures: 13 failed and 143 passed files, with JWT_SECRET environment variable is required and dependent initializeDatabase errors. This run was not counted as product RED or GREEN.",
+      "fix_path": "Used the repository CI contract: generated an ephemeral process-only random JWT secret, selected test:node, TZ=UTC, and serialized workers. No secret was printed or written to a file.",
+      "post_fix_command": "pis_test_jwt=$(openssl rand -base64 48) && TZ=UTC JWT_SECRET=$pis_test_jwt npm run test:node -- --maxWorkers=1 --minWorkers=1",
+      "post_fix_result": "PASS after both inbound fixes: exit 0; 156 files, 2010 tests, duration 217.42s. The earlier 2007/2007 run is not candidate evidence.",
+      "escaped_author_tests": "NOT_A_PRODUCT_DEFECT",
+      "residual_boundary": "A missing runtime secret must continue to fail closed; only test execution receives the ephemeral value.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-007-MUTATION-FEFO",
+      "requirement_or_entry": "FEFO expiry_date ordering",
+      "discovered_when": "mutation",
+      "pre_fix_reproduction": "Reversing expiry comparison initially survived because both seeded batches had the same expiry. After strengthening the fixture to distinct expiries, the mutant failed 1 planner test with B-02 allocated before B-01.",
+      "fix_path": "Kept ascending expiry comparison and retained the distinct-expiry regression fixture.",
+      "post_fix_command": "npm test -- tests/inventory-position-planner.test.ts",
+      "post_fix_result": "PASS after restore; reverse-expiry mutant killed.",
+      "escaped_author_tests": "YES_INITIAL_MUTATION_SURVIVED",
+      "residual_boundary": "Tie-breakers for equal expiry remain separately asserted by batch creation/identity/location ordering.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-008-MUTATION-CAPACITY",
+      "requirement_or_entry": "capacity package rounding",
+      "discovered_when": "mutation",
+      "pre_fix_reproduction": "Changing Math.ceil(position quantity / units per package) to Math.floor made an 11-unit addition fit a one-slot location and failed the expected LOCATION_CAPACITY_EXCEEDED assertion.",
+      "fix_path": "Restored per-position upward rounding.",
+      "post_fix_command": "npm test -- tests/inventory-position-planner.test.ts",
+      "post_fix_result": "PASS after restore; floor mutant killed with 1 failing test while active.",
+      "escaped_author_tests": "NO",
+      "residual_boundary": "Missing conversion still follows the frozen allow-with-audit policy.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-009-MUTATION-TRANSFER",
+      "requirement_or_entry": "70/30 transfer conservation",
+      "discovered_when": "mutation",
+      "pre_fix_reproduction": "Reducing each target transfer addition by one scaled unit produced 49.9999 instead of 50 and 2.9999 instead of 3; two planner tests failed.",
+      "fix_path": "Restored exact moved units on the target position.",
+      "post_fix_command": "npm test -- tests/inventory-position-planner.test.ts",
+      "post_fix_result": "PASS after restore; conservation mutant killed with 2 failing tests while active.",
+      "escaped_author_tests": "NO",
+      "residual_boundary": "Production concurrency remains bounded by the SQLite transaction model; no real database load test was authorized.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-010-MUTATION-FEFO-OVERRIDE",
+      "requirement_or_entry": "operator batch pin rejection",
+      "discovered_when": "mutation",
+      "pre_fix_reproduction": "Disabling the pinnedBatchId guard made the expected FEFO_OVERRIDE_FORBIDDEN exception disappear and failed one planner test.",
+      "fix_path": "Restored unconditional rejection of any non-null operator batch pin.",
+      "post_fix_command": "npm test -- tests/inventory-position-planner.test.ts",
+      "post_fix_result": "PASS after restore; override mutant killed.",
+      "escaped_author_tests": "NO",
+      "residual_boundary": "Client fields may remain for stable rejection compatibility but cannot select allocations.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-011-MUTATION-MIGRATION",
+      "requirement_or_entry": "synthetic legacy migration fail closed and zero partial writes",
+      "discovered_when": "mutation",
+      "pre_fix_reproduction": "Disabling stock-versus-batch-total validation let an unprovable legacy cache mismatch migrate; the schema test expected an INVENTORY_POSITION_MIGRATION_UNPROVABLE error and failed.",
+      "fix_path": "Restored exact stock and batch remaining equality validation inside BEGIN IMMEDIATE with rollback.",
+      "post_fix_command": "npm test -- tests/inventory-position-schema.test.ts",
+      "post_fix_result": "PASS after restore; migration mutant killed with 1 failing test while active.",
+      "escaped_author_tests": "NO",
+      "residual_boundary": "Only synthetic fixtures were migrated; real database shape, backup, and rollback remain unauthorized.",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    },
+    {
+      "finding_id": "PIS-EFF-012-INDEPENDENT-REVIEW",
+      "requirement_or_entry": "G5 fixed local candidate finding-first review",
+      "discovered_when": "independent-review",
+      "pre_fix_reproduction": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "fix_path": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "post_fix_command": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "post_fix_result": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "escaped_author_tests": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "residual_boundary": "PENDING_FIXED_CANDIDATE_REVIEW",
+      "would_harness_have_blocked": "UNASSESSED_BY_PIS"
+    }
+  ]
+}

@@ -41,7 +41,7 @@ function snapshot() {
       ORDER BY id
     `).all(materialId),
     allocations: db.prepare(`
-      SELECT operation_kind, owner_id, owner_line_id, batch_id, direction, quantity, is_reversed
+      SELECT operation_kind, owner_id, owner_line_id, batch_id, location_id, direction, quantity
       FROM inventory_transaction_allocations
       ORDER BY batch_id
     `).all(),
@@ -58,10 +58,12 @@ beforeAll(async () => {
 beforeEach(() => {
   db.exec(`
     DELETE FROM inventory_transaction_allocations;
+    DELETE FROM inventory_positions;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;
     DELETE FROM material_categories;
+    DELETE FROM locations;
   `)
   db.prepare(`
     INSERT INTO material_categories (id, code, name, level)
@@ -71,6 +73,10 @@ beforeEach(() => {
     INSERT INTO materials (id, code, name, unit, category_id)
     VALUES (?, 'LOC-001-MAT', 'LOC-001 material', 'pcs', 'LOC-001-CAT')
   `).run(materialId)
+  db.prepare(`
+    INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES ('LOC-001-A', 'LOC-001-A', 'LOC-001', 'shelf', 'A', 1)
+  `).run()
   db.prepare(`
     INSERT INTO inventory (id, material_id, stock, locked_stock)
     VALUES ('LOC-001-INV', ?, 12, 0)
@@ -99,6 +105,12 @@ beforeEach(() => {
     expiryDate: '2026-09-01',
     createdAt: '2026-01-03T00:00:00.000Z',
   })
+  for (const [batchId, quantity] of [['B-LATE', 5], ['B-FIRST', 4], ['B-SECOND', 3]] as const) {
+    db.prepare(`
+      INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+      VALUES (?, ?, ?, 'LOC-001-A', ?)
+    `).run(`P-${batchId}`, materialId, batchId, quantity)
+  }
 })
 
 describe('LOC-001 locked inventory transaction fact', () => {
@@ -141,25 +153,25 @@ describe('LOC-001 locked inventory transaction fact', () => {
           owner_id: 'OUT-1',
           owner_line_id: 'LINE-1',
           batch_id: 'B-FIRST',
+          location_id: 'LOC-001-A',
           direction: 'out',
           quantity: 4,
-          is_reversed: 0,
         },
         {
           operation_kind: 'outbound',
           owner_id: 'OUT-1',
           owner_line_id: 'LINE-1',
           batch_id: 'B-SECOND',
+          location_id: 'LOC-001-A',
           direction: 'out',
           quantity: 2,
-          is_reversed: 0,
         },
       ],
     })
     expect(inventoryTransactions.assertInventoryConserved(db, materialId)).toBe(6)
   })
 
-  it('never falls back when an explicit batch is insufficient', () => {
+  it('rejects any explicit batch override before planning', () => {
     const before = snapshot()
     expect(() => inventoryTransactions.planInventoryDeductions(db, [{
       materialId,
@@ -167,8 +179,8 @@ describe('LOC-001 locked inventory transaction fact', () => {
       pinnedBatchId: 'B-FIRST',
       ownerLineId: 'LINE-PINNED',
     }])).toThrowError(expect.objectContaining({
-      code: 'BATCH_STOCK_INSUFFICIENT',
-      status: 422,
+      code: 'FEFO_OVERRIDE_FORBIDDEN',
+      status: 400,
     }))
     expect(snapshot()).toEqual(before)
   })

@@ -7,9 +7,6 @@ import { parseFinitePositiveNumber } from '../utils/numeric-input.js'
 import {
   applyInventoryPlan,
   inventoryErrorResponse,
-  listActiveAllocationFacts,
-  markAllocationFactsReversed,
-  planExactInventoryAdditions,
   planInventoryDeductions,
   replaceAllocationFacts,
 } from '../services/inventory-transactions.js'
@@ -105,6 +102,9 @@ router.post('/', requireScrapsWrite, (req, res) => {
     if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
+    if (batchId !== undefined && batchId !== null && batchId !== '') {
+      error(res, 'Batch selection cannot override automatic FEFO', 'FEFO_OVERRIDE_FORBIDDEN', 400); return
+    }
     const db = getDatabase()
     if (!db.prepare('SELECT id FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)) {
       error(res, 'Material not found', 'NOT_FOUND', 404); return
@@ -121,7 +121,6 @@ router.post('/', requireScrapsWrite, (req, res) => {
       const plan = planInventoryDeductions(db, [{
         materialId,
         quantity: qty,
-        pinnedBatchId: batchId || null,
         ownerLineId: id,
       }])
       const exactBatchId = plan.allocations.length === 1 ? plan.allocations[0].batchId : null
@@ -157,52 +156,10 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const idemKey = readIdempotencyKey(req)
-    const idemScope = `scrap:delete:${id}`
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
-    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     if (!db.prepare('SELECT id FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id)) {
       error(res, 'Scrap record not found', 'NOT_FOUND', 404); return
     }
-    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, req.body?.operator || 'system')
-      if (!db.prepare('SELECT id FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id)) {
-        error(res, 'Scrap record changed before cancellation', 'CONCURRENT_MODIFICATION', 409)
-        db.exec('ROLLBACK')
-        return
-      }
-      const facts = listActiveAllocationFacts(db, 'scrap', id)
-      if (facts.length === 0) {
-        error(res, 'Scrap allocation is unavailable', 'ALLOCATION_NOT_FOUND', 409)
-        db.exec('ROLLBACK')
-        return
-      }
-      const plan = planExactInventoryAdditions(db, facts.map((fact) => ({
-        materialId: fact.material_id,
-        batchId: fact.batch_id,
-        quantity: fact.quantity,
-        ownerLineId: fact.id,
-      })))
-      db.prepare('UPDATE scrap_records SET is_deleted = 1 WHERE id = ?').run(id)
-      applyInventoryPlan(db, plan)
-      markAllocationFactsReversed(db, 'scrap', id)
-      for (const allocation of plan.allocations) {
-        db.prepare(`
-          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-          VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, 'scrap cancellation')
-        `).run(uuidv4(), allocation.materialId, allocation.quantity, allocation.inventoryBefore, allocation.inventoryAfter, id, req.body?.operator || 'system')
-      }
-      responseEnvelope = buildSuccessEnvelope(null, 'Scrap cancelled')
-      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
-      db.exec('COMMIT')
-      res.status(200).json(responseEnvelope)
-    } catch (err) {
-      db.exec('ROLLBACK')
-      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
-      throw err
-    }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
   } catch (err: any) {
     const failure = inventoryErrorResponse(err)
     if (failure) { error(res, failure.message, failure.code, failure.status); return }
