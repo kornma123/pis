@@ -9,8 +9,8 @@
   },
   "candidate": {
     "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
-    "implementation_candidate_sha": "PENDING_LOCAL_COMMIT",
-    "implementation_tree_hash": "PENDING_LOCAL_COMMIT",
+    "implementation_candidate_sha": "afff326e84aba5b2af1cbe14aabd2bb638f136f0",
+    "implementation_tree_hash": "854464af58de3c6e9bf809cdf48edcebe9890206",
     "evidence_subject": "The implementation commit; later evidence-only commits must not change product code"
   },
   "final_candidate_gates": {

@@ -14,6 +14,8 @@
 - **owner / author**: Codex root task `PIS-INV-G01-001`
 - **reviewer**: 未参与实现的只读 reviewer，候选固定后启动
 - **base SHA**: `e0cb8083d113ab5c9fc901fc16fb9265cf01243e`
+- **fixed implementation candidate SHA**: `afff326e84aba5b2af1cbe14aabd2bb638f136f0`
+- **fixed implementation tree hash**: `854464af58de3c6e9bf809cdf48edcebe9890206`
 - **worktree**: `/Users/maxiaoyuan/.codex/worktrees/a34c/进销存`
 - **branch**: `codex/pis-inventory-position-full-switch-20260805`
 
@@ -110,6 +112,7 @@
 - **人工或真人验证**: 本轮无前端写入，UI 真跑不在授权范围。
 - **preflight / drift check**: `2026-08-05` 启动 develop preflight PASS；base/head 均为 `e0cb8083...`。实施中 scope 纠偏选择 A：精确追加 `material-delete-reference-guards.ts` 和 `inventory-position-delete-guards.test.ts`，撤回未授权的 `scripts/**` 改动。重跑 develop preflight：HEAD/origin/master 均为 `e0cb8083...`，ahead/behind=0，`excludedDirty=[]`、`foreignDirty=[]`，精确跨 worktree overlap 仅当前 worktree；总 verdict 为 WARN 而非 PASS，唯一 WARN 是实施中 17 个已声明 owned paths 正在 dirty，无 scope/authority/freshness 失败。待候选固定后再跑干净候选 gate。
 - **最终提交前 scope checkpoint**: 刷新 `origin/master` 后仍为 `e0cb8083...`，live open PR=`[]`；以 33 条精确 owned patterns（含 effect evidence 新文件、material delete guard 和 Issue #112 例外）重跑 develop preflight。总 verdict=`WARN`，唯一 WARN 是当前实现中的 32 个 owned paths 正在 dirty；branch/freshness/authority 全部 PASS，`excludedDirty=[]`、`foreignDirty=[]`，未扩大到其他主数据保护、Issue #112 或 seed script 文件。该 WARN 是候选提交前的预期状态，不冒充干净候选 PASS。
+- **固定候选干净 preflight**: 提交 `afff326e84aba5b2af1cbe14aabd2bb638f136f0` 后再次刷新 `origin/master` 并以同一精确 scope 运行 develop preflight：verdict=`PASS`，ahead=1、behind=0、worktree clean，`ownedDirty=[]`、`excludedDirty=[]`、`foreignDirty=[]`，authority/freshness/drift checks 全部 PASS。
 - **Issue #112 fixture-only scope checkpoint**: 首轮完整后端测试为 155 files / 2004 tests PASS，唯一失败是 `issue-112-business-month.test.ts` 的 3 个出库请求因旧 fixture 缺 position 而 fail closed 409；在修改该文件前已将精确路径加入上述 fixture-only exception。刷新 `origin` 后 exact overlap 扫描未发现任何现存 worktree 在该精确路径有 dirty 写入（3 个已登记但路径不存在的 prunable worktree 不视为活写者）；HEAD/origin/master 均为 `e0cb8083...`。develop preflight 总 verdict=`WARN`，唯一 WARN 是 30 个已声明 owned paths 正在 dirty；branch/freshness/authority 均 PASS，`excludedDirty=[]`、`foreignDirty=[]`。该结果不表述为整体 PASS。
 - **Issue #112 conflict resolution**: fixture-only 补齐后 exact 为 8/9，完整后端为 155 files / 2006 tests PASS；唯一红灯是既有完成态 outbound PUT 期望 200，而当前 G2 合同要求 409。PM 裁决明确完成态 material/quantity 禁止直接修改，原 update 活跃路径已被 G2 边界移除；授权范围仅该一个用例验证 409、零库存/position/原单改写及零新增 ledger_drift 记录/调用。未授权实现更新补偿链或修改其他 Issue #112 断言/文件。
 - **入口与写者静态复核**: `src` 内数量表写入只剩统一 `inventory-transactions.ts`、显式 synthetic migration 和材料创建的零缓存行；`inbound-v1.1.ts` 的两处 `UPDATE inventory` 只维护 `last_inbound_*` 元数据。未发现 `inventory_locations` 第二真值；`is_reversed` 仅出现在旧 allocation schema 检测，当前事实表无可变 reverse 标志。
