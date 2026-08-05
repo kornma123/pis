@@ -15,6 +15,11 @@ export default function BOMPage() {
 
   return (
     <div className="space-y-5">
+      {page.error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          加载失败：{page.error}
+        </div>
+      )}
       {/* 页面头部 */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -62,6 +67,7 @@ export default function BOMPage() {
       <BOMTable
         data={page.data}
         loading={page.loading}
+        error={page.error}
         total={page.total}
         page={page.page}
         pageSize={page.pageSize}

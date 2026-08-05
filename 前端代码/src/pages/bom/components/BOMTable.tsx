@@ -15,6 +15,7 @@ import { StatusBadge } from './StatusBadge'
 interface Props {
   data: BOM[]
   loading: boolean
+  error?: string | null
   total: number
   page: number
   pageSize: number
@@ -46,6 +47,7 @@ interface Props {
 export function BOMTable({
   data,
   loading,
+  error,
   total,
   page,
   pageSize,
@@ -244,17 +246,28 @@ export function BOMTable({
                 </td>
               </tr>
             ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
-                  <div className="flex flex-col items-center gap-2">
-                    <FileText className="w-12 h-12 text-gray-300" />
-                    <p className="text-sm">暂无BOM数据</p>
-                    <p className="text-xs text-gray-400">
-                      点击“新建BOM”添加物料清单
-                    </p>
-                  </div>
-                </td>
-              </tr>
+              error ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-red-600">
+                    <div className="flex flex-col items-center gap-2">
+                      <FileText className="w-12 h-12 text-red-300" />
+                      <p className="text-sm">加载失败：{error}</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <FileText className="w-12 h-12 text-gray-300" />
+                      <p className="text-sm">暂无BOM数据</p>
+                      <p className="text-xs text-gray-400">
+                        点击“新建BOM”添加物料清单
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )
             ) : (
               data.map((row) => {
                 const mStatus = getMaterialStatus(row)
@@ -299,7 +312,7 @@ export function BOMTable({
                       {row.version || '-'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {row.materialCount ?? 0}
+                      {typeof row.materialCount === 'number' ? row.materialCount : '未知'}
                     </td>
                     <td className={`px-4 py-3 ${supportableClass}`}>
                       {supportable !== undefined && supportable !== null

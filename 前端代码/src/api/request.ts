@@ -3,6 +3,21 @@ import type { AxiosError, AxiosRequestConfig } from 'axios'
 import { toast } from 'sonner'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
+const GENERIC_REQUEST_ERROR = '请求失败，请稍后重试'
+const SAFE_AXIOS_ERROR_CODES = new Set([
+  'ERR_BAD_OPTION_VALUE',
+  'ERR_BAD_OPTION',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ERR_NETWORK',
+  'ERR_FR_TOO_MANY_REDIRECTS',
+  'ERR_DEPRECATED',
+  'ERR_BAD_RESPONSE',
+  'ERR_BAD_REQUEST',
+  'ERR_CANCELED',
+  'ERR_NOT_SUPPORT',
+  'ERR_INVALID_URL',
+])
 
 /**
  * 响应拦截器（见下方）会在成功时返回 `response.data.data`，即**已解包**的业务负载。
@@ -52,6 +67,166 @@ function logoutAndRedirect() {
   window.location.href = '/login'
 }
 
+// ===== 展示层脱敏（Issue71）=====
+const SENSITIVE_KEY_PATTERN =
+  /(?:authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential)/i
+const SENSITIVE_MARKER_PATTERN =
+  /(authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential|Bearer|Basic|Digest|NTLM|Negotiate)/i
+const CREDENTIAL_SCHEME_PATTERN = /\b(?:Bearer|Basic|Digest|NTLM|Negotiate)\s+[^\s,;}\]]+/gi
+const DIGEST_PAIR_PATTERN =
+  /\b(?:username|response|uri|nc|cnonce|qop|algorithm|opaque|realm)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi
+const LONG_TOKEN_PATTERN = /[A-Za-z0-9+/]{40,}={0,2}/
+const SENSITIVE_KEY_VALUE_PATTERN =
+  /(["']?)(authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential)\1\s*[:=]\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|([^\s,;}\]]+))/gi
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** 非 JSON 文本的保守清洗：先解转义引号，再遮凭据 scheme 与敏感键值对。 */
+function redactConservativeText(text: string): string {
+  const normalized = text.replace(/\\"/g, '"').replace(/\\'/g, "'")
+  const noSchemes = normalized
+    .replace(CREDENTIAL_SCHEME_PATTERN, '[REDACTED]')
+    .replace(DIGEST_PAIR_PATTERN, '[REDACTED]')
+  return noSchemes.replace(SENSITIVE_KEY_VALUE_PATTERN, '[REDACTED]')
+}
+
+function hasSensitiveMarker(text: string): boolean {
+  return SENSITIVE_MARKER_PATTERN.test(text) || LONG_TOKEN_PATTERN.test(text)
+}
+
+function redactJsonString(value: string): string {
+  if (!value.trim()) return value
+  if (hasSensitiveMarker(value)) return '[REDACTED]'
+  const redacted = redactConservativeText(value)
+  return hasSensitiveMarker(redacted) ? '[REDACTED]' : redacted
+}
+
+/** 可识别 JSON 的递归清洗：敏感键值整值替换为 [REDACTED]，普通字段保留。 */
+function redactJsonValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return '[REDACTED]'
+  if (Array.isArray(value)) return value.map((item) => redactJsonValue(item, depth + 1))
+  if (isRecord(value)) {
+    const out: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) {
+      out[key] =
+        SENSITIVE_KEY_PATTERN.test(key) ||
+        key === 'toJSON' ||
+        typeof item === 'function' ||
+        typeof item === 'symbol' ||
+        typeof item === 'bigint'
+          ? '[REDACTED]'
+          : redactJsonValue(item, depth + 1)
+    }
+    return out
+  }
+  if (typeof value === 'string') return redactJsonString(value)
+  return value
+}
+
+/**
+ * 把后端错误原文转成可展示的安全文案。
+ * - 可识别 JSON：安全解析 + 递归清洗后返回；
+ * - 非 JSON：保守清洗；若无法证明原文已安全（敏感标记仍在），返回空串，
+ *   调用方必须回退固定通用文案，禁止回显原始错误。
+ */
+export function sanitizeErrorMessage(input: string): string {
+  const trimmed = input.trim()
+  if (!trimmed) return ''
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    parsed = undefined
+  }
+  if (parsed !== undefined) {
+    return JSON.stringify(redactJsonValue(parsed))
+  }
+
+  // 一旦原始自由文本带有敏感标记，就不尝试保留局部片段，避免部分替换后的尾部泄漏。
+  if (hasSensitiveMarker(trimmed)) return ''
+  const redacted = redactConservativeText(trimmed).trim()
+  if (!redacted) return ''
+  if (hasSensitiveMarker(redacted)) return ''
+  return redacted
+}
+
+/**
+ * AxiosError 会携带请求 headers/body/query 与底层 request；最终交给业务层前只保留
+ * 排障所需的安全元数据。401 重放决策完成前不得调用本函数，否则会破坏重试凭据。
+ */
+function sanitizeTransportValue(value: unknown): unknown {
+  if (typeof value === 'string') return sanitizeErrorMessage(value) || '[REDACTED]'
+  if (Array.isArray(value) || isRecord(value)) return redactJsonValue(value)
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value
+  }
+  return '[REDACTED]'
+}
+
+function sanitizeAxiosErrorForDisplay(error: AxiosError): AxiosError {
+  const safeMessage =
+    typeof error.message === 'string' && error.message.trim()
+      ? sanitizeErrorMessage(error.message)
+      : ''
+  const method = error.config?.method
+  const safeMethod =
+    typeof method === 'string' && /^(?:get|post|put|patch|delete|head|options)$/i.test(method)
+      ? method
+      : undefined
+  const safeConfig = error.config
+    ? ((safeMethod ? { method: safeMethod } : {}) as NonNullable<AxiosError['config']>)
+    : undefined
+  const originalResponse = error.response
+  const safeResponse = originalResponse
+    ? ({
+        data: sanitizeTransportValue(originalResponse.data),
+        status: originalResponse.status,
+        statusText: '',
+        headers: {},
+        config: safeConfig || {},
+      } as typeof originalResponse)
+    : undefined
+
+  // 新建白名单 Error，避免原 AxiosError 的已缓存 stack、toJSON 或自定义可枚举字段泄漏。
+  const safeError = new Error(safeMessage || GENERIC_REQUEST_ERROR) as AxiosError
+  safeError.name = 'AxiosError'
+  if (typeof error.code === 'string' && SAFE_AXIOS_ERROR_CODES.has(error.code)) {
+    safeError.code = error.code
+  }
+  safeError.config = safeConfig
+  safeError.request = undefined
+  safeError.response = safeResponse
+  safeError.status = Number.isInteger(error.status)
+    ? error.status
+    : originalResponse?.status
+  safeError.cause = undefined
+  safeError.isAxiosError = true
+  safeError.toJSON = () => ({
+    name: safeError.name,
+    message: safeError.message,
+    code: safeError.code,
+    status: safeError.status,
+    config: safeError.config,
+    response: safeResponse
+      ? {
+          data: safeResponse.data,
+          status: safeResponse.status,
+          statusText: '',
+          headers: {},
+          config: safeResponse.config,
+        }
+      : undefined,
+  })
+  return safeError
+}
+
 // ===== Token 续期：单飞锁 + 失败请求重放队列 =====
 let isRefreshing = false
 let pendingQueue: Array<(token: string | null) => void> = []
@@ -99,12 +274,48 @@ request.interceptors.response.use(
   (response) => {
     const { data } = response
     if (!data.success) {
-      toast.error(data.error?.message || '操作失败')
-      return Promise.reject(data.error)
+      const rawError: unknown = data.error
+      if (typeof rawError === 'string') {
+        const safe = sanitizeErrorMessage(rawError)
+        const message = safe || '操作失败'
+        toast.error(message)
+        return Promise.reject({ message })
+      }
+      if (isRecord(rawError)) {
+        const rawMessage = typeof rawError.message === 'string' ? rawError.message : ''
+        const safe = sanitizeErrorMessage(rawMessage)
+        const message = safe || '操作失败'
+        toast.error(message)
+        const sanitized = redactJsonValue(rawError) as Record<string, unknown>
+        sanitized.message = message
+        return Promise.reject(sanitized)
+      }
+      toast.error('操作失败')
+      return Promise.reject({ message: '操作失败' })
     }
     return data.data
   },
   async (error: AxiosError) => {
+    const responseError = (error.response?.data as { error?: unknown } | undefined)?.error
+    let safeBackendMessage: string | undefined
+    if (isRecord(responseError) && typeof responseError.message === 'string') {
+      const safe = sanitizeErrorMessage(responseError.message)
+      if (safe) {
+        responseError.message = safe
+        safeBackendMessage = safe
+      } else {
+        responseError.message = GENERIC_REQUEST_ERROR
+        safeBackendMessage = GENERIC_REQUEST_ERROR
+      }
+    }
+    if (error.response && isRecord(error.response.data)) {
+      error.response.data = redactJsonValue(error.response.data) as typeof error.response.data
+    }
+    if (typeof error.message === 'string' && error.message.trim()) {
+      const safe = sanitizeErrorMessage(error.message)
+      error.message = safe || GENERIC_REQUEST_ERROR
+    }
+
     const status = error.response?.status
     const originalConfig = error.config as
       | (AxiosRequestConfig & { _retried?: boolean; url?: string })
@@ -117,7 +328,7 @@ request.interceptors.response.use(
 
       if (isRefreshCall || !hasRefreshToken) {
         logoutAndRedirect()
-        return Promise.reject(error)
+        return Promise.reject(sanitizeAxiosErrorForDisplay(error))
       }
 
       originalConfig._retried = true
@@ -127,7 +338,7 @@ request.interceptors.response.use(
         return new Promise((resolve, reject) => {
           pendingQueue.push((token) => {
             if (!token) {
-              reject(error)
+              reject(sanitizeAxiosErrorForDisplay(error))
               return
             }
             originalConfig.headers = {
@@ -145,7 +356,7 @@ request.interceptors.response.use(
         if (!newToken) {
           flushQueue(null)
           logoutAndRedirect()
-          return Promise.reject(error)
+          return Promise.reject(sanitizeAxiosErrorForDisplay(error))
         }
         flushQueue(newToken)
         originalConfig.headers = {
@@ -158,11 +369,9 @@ request.interceptors.response.use(
       }
     }
 
-    const msg = error.response?.data
-      ? (error.response.data as any)?.error?.message
-      : undefined
-    toast.error(msg || error.message || '网络错误')
-    return Promise.reject(error)
+    const safeError = sanitizeAxiosErrorForDisplay(error)
+    toast.error(safeBackendMessage || safeError.message || '网络错误')
+    return Promise.reject(safeError)
   }
 )
 

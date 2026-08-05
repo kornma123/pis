@@ -223,4 +223,54 @@ describe('useInventoryPage', () => {
     expect(result.current.keyword).toBe('')
     expect(result.current.category).toBe('全部分类')
   })
+
+  it('Issue71: BOM detail 合法 0 的 stock/usagePerSample 保真', async () => {
+    vi.mocked(bomApi.getDetail).mockResolvedValue({
+      materials: [{
+        id: 'mat-1',
+        code: 'M001',
+        name: '耗材A',
+        spec: '10ml',
+        unit: '盒',
+        stock: 0,
+        usagePerSample: 0,
+      }],
+    } as never)
+
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.loadBomDetail('bom-1')
+    })
+    await waitFor(() => expect(result.current.bomMaterials).toHaveLength(1))
+
+    expect(result.current.bomMaterials[0].stock).toBe(0)
+    expect(result.current.bomMaterials[0].usagePerSample).toBe(0)
+  })
+
+  it('Issue71: BOM detail unknown stock/usagePerSample 不得被折成 0', async () => {
+    vi.mocked(bomApi.getDetail).mockResolvedValue({
+      materials: [{
+        id: 'mat-1',
+        code: 'M001',
+        name: '耗材A',
+        spec: '10ml',
+        unit: '盒',
+        stock: undefined,
+        usagePerSample: undefined,
+      }],
+    } as never)
+
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.loadBomDetail('bom-1')
+    })
+    await waitFor(() => expect(result.current.bomMaterials).toHaveLength(1))
+
+    expect(result.current.bomMaterials[0].stock).not.toBe(0)
+    expect(result.current.bomMaterials[0].usagePerSample).not.toBe(0)
+  })
 })
