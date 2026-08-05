@@ -91,7 +91,10 @@ describe('request', () => {
     localStorage.setItem('rememberUsername', 'admin')
     const error = { config: { url: '/inventory' }, response: { status: 401, data: {} } }
 
-    await expect(responseRejected(error)).rejects.toEqual(error)
+    await expect(responseRejected(error)).rejects.toMatchObject({
+      message: '请求失败，请稍后重试',
+      response: { status: 401 },
+    })
     // P1-11: clearAuth 统一清理
     expect(localStorage.getItem('token')).toBeNull()
     expect(localStorage.getItem('refreshToken')).toBeNull()
@@ -136,7 +139,10 @@ describe('request', () => {
     vi.mocked(axios.post).mockRejectedValue(new Error('refresh failed'))
 
     const error = { config: { url: '/inventory', headers: {} }, response: { status: 401 } }
-    await expect(responseRejected(error)).rejects.toEqual(error)
+    await expect(responseRejected(error)).rejects.toMatchObject({
+      message: '请求失败，请稍后重试',
+      response: { status: 401 },
+    })
 
     expect(axios.post).toHaveBeenCalled()
     // refresh 失败 → 登出清理
@@ -150,7 +156,10 @@ describe('request', () => {
     localStorage.setItem('refreshToken', 'refresh-1')
 
     const error = { config: { url: '/auth/refresh', headers: {} }, response: { status: 401 } }
-    await expect(responseRejected(error)).rejects.toEqual(error)
+    await expect(responseRejected(error)).rejects.toMatchObject({
+      message: '请求失败，请稍后重试',
+      response: { status: 401 },
+    })
 
     // 刷新端点本身 401 → 直接登出，不再次调用 refresh
     expect(axios.post).not.toHaveBeenCalled()
@@ -273,26 +282,41 @@ describe('request', () => {
         'request-secret',
         'backend-secret',
         'response-secret',
+        'status-secret',
+        'transport-secret',
+        'custom-secret',
       ]
-      const error = {
-        message: 'password is hunter2',
-        config: {
-          method: 'post',
-          url: '/inventory?token=url-secret',
-          headers: { Authorization: 'Bearer header-secret' },
-          data: JSON.stringify({ password: 'body-secret' }),
-          params: { apiKey: 'param-secret' },
-        },
-        request: { headers: { Authorization: 'Bearer request-secret' } },
-        response: {
+      const actualAxios = await vi.importActual<typeof import('axios')>('axios')
+      const config = {
+        method: 'post',
+        url: '/inventory?token=url-secret',
+        headers: { Authorization: 'Bearer header-secret' },
+        data: JSON.stringify({ password: 'body-secret' }),
+        params: { apiKey: 'param-secret' },
+      }
+      const rawRequest = { headers: { Authorization: 'Bearer request-secret' } }
+      const rawResponse = {
           status: 500,
+          statusText: 'password is status-secret',
           headers: { 'set-cookie': 'token=response-header-secret' },
+          transportSecret: 'Bearer transport-secret',
           data: {
             error: { message: 'password is backend-secret' },
             debug: { token: 'response-secret' },
           },
-        },
       }
+      const error = Object.assign(
+        new actualAxios.AxiosError(
+          'password is hunter2',
+          'ERR_BAD_RESPONSE',
+          config as never,
+          rawRequest,
+          { ...rawResponse, config } as never
+        ),
+        { diagnostic: 'Bearer custom-secret' }
+      )
+      // 真实 AxiosError 的 stack 一旦在拦截器前物化，旧实现只改 message 也无法清掉它。
+      expect(error.stack).toContain('hunter2')
 
       let rejected: typeof error | undefined
       try {
@@ -306,7 +330,11 @@ describe('request', () => {
       expect(rejected?.message).toBe('请求失败，请稍后重试')
       expect(rejected?.config).toEqual({ method: 'post' })
       expect(rejected?.request).toBeUndefined()
-      expect(rejected?.response.headers).toEqual({})
+      expect(rejected?.response?.headers).toEqual({})
+      expect(rejected?.stack).not.toContain('hunter2')
+      expect(rejected?.diagnostic).toBeUndefined()
+      expect(rejected?.response?.statusText).toBe('')
+      expect(Object.prototype.hasOwnProperty.call(rejected?.response ?? {}, 'transportSecret')).toBe(false)
       const serialized = JSON.stringify(rejected)
       for (const secret of secrets) expect(serialized).not.toContain(secret)
       expect(serialized).not.toContain('response-header-secret')

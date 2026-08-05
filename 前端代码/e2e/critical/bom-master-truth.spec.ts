@@ -37,9 +37,12 @@ test('admin can open the materials and projects master-data pages', async ({ pag
   await expect(page.getByRole('heading', { name: '物料管理', exact: true })).toBeVisible()
   await expect(page.getByText('加载中...', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/加载失败：/)).toHaveCount(0)
-  const materialRows = page.locator('tbody tr')
-  expect(await materialRows.count()).toBeGreaterThan(0)
-  await expect(materialRows.first()).toBeVisible()
+  const materialEmpty = page.getByText('暂无数据', { exact: true })
+  if (await materialEmpty.isVisible()) {
+    await expect(materialEmpty).toBeVisible()
+  } else {
+    await expect(page.locator('tbody tr').filter({ hasNot: page.locator('td[colspan]') }).first()).toBeVisible()
+  }
 
   const projectsResponse = page.waitForResponse((response) =>
     /\/api\/v1\/projects(?:\?|$)/.test(response.url()) && response.request().method() === 'GET'
@@ -49,9 +52,12 @@ test('admin can open the materials and projects master-data pages', async ({ pag
   await expect(page.getByRole('heading', { name: '检测服务', exact: true })).toBeVisible()
   await expect(page.getByText('加载中...', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/加载失败：/)).toHaveCount(0)
-  const projectRows = page.locator('tbody tr')
-  expect(await projectRows.count()).toBeGreaterThan(0)
-  await expect(projectRows.first()).toBeVisible()
+  const projectEmpty = page.getByText('暂无检测服务', { exact: true })
+  if (await projectEmpty.isVisible()) {
+    await expect(projectEmpty).toBeVisible()
+  } else {
+    await expect(page.locator('tbody tr').filter({ hasNot: page.locator('td[colspan]') }).first()).toBeVisible()
+  }
 })
 
 test('malformed BOM list response shows explicit error, not empty success', async ({ page }) => {

@@ -150,6 +150,12 @@ describe('materialApi 响应真值（Issue71）', () => {
     await expect(materialApi.getList({})).rejects.toThrow()
   })
 
+  it('fail-closed：分页整数超过 JavaScript 安全整数范围', async () => {
+    const unsafeTotal = Number.MAX_SAFE_INTEGER + 1
+    get.mockResolvedValue(pagePayload([], unsafeTotal) as never)
+    await expect(materialApi.getList({})).rejects.toThrow()
+  })
+
   it('detail：合法空 batches/stockLogs 与可空字段保真', async () => {
     get.mockResolvedValue({ ...materialRow(), batches: [], stockLogs: [] } as never)
     const res = await materialApi.getDetail('mat-1')
@@ -318,6 +324,14 @@ describe('projectApi 响应真值（Issue71）', () => {
     get.mockResolvedValue({
       ...projectRow(),
       costStats: { totalCost: 1, sampleCount: 1.5, unitCost: 1 },
+    } as never)
+    await expect(projectApi.getDetail('proj-1')).rejects.toThrow()
+  })
+
+  it('detail：sampleCount 超过安全整数范围必须 fail-closed', async () => {
+    get.mockResolvedValue({
+      ...projectRow(),
+      costStats: { totalCost: 1, sampleCount: Number.MAX_SAFE_INTEGER + 1, unitCost: 1 },
     } as never)
     await expect(projectApi.getDetail('proj-1')).rejects.toThrow()
   })

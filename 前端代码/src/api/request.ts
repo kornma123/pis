@@ -95,7 +95,14 @@ function redactJsonValue(value: unknown, depth = 0): unknown {
   if (isRecord(value)) {
     const out: Record<string, unknown> = {}
     for (const [key, item] of Object.entries(value)) {
-      out[key] = SENSITIVE_KEY_PATTERN.test(key) ? '[REDACTED]' : redactJsonValue(item, depth + 1)
+      out[key] =
+        SENSITIVE_KEY_PATTERN.test(key) ||
+        key === 'toJSON' ||
+        typeof item === 'function' ||
+        typeof item === 'symbol' ||
+        typeof item === 'bigint'
+          ? '[REDACTED]'
+          : redactJsonValue(item, depth + 1)
     }
     return out
   }
@@ -135,31 +142,75 @@ export function sanitizeErrorMessage(input: string): string {
  * AxiosError 会携带请求 headers/body/query 与底层 request；最终交给业务层前只保留
  * 排障所需的安全元数据。401 重放决策完成前不得调用本函数，否则会破坏重试凭据。
  */
+function sanitizeTransportValue(value: unknown): unknown {
+  if (typeof value === 'string') return sanitizeErrorMessage(value) || '[REDACTED]'
+  if (Array.isArray(value) || isRecord(value)) return redactJsonValue(value)
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value
+  }
+  return '[REDACTED]'
+}
+
 function sanitizeAxiosErrorForDisplay(error: AxiosError): AxiosError {
   const safeMessage =
     typeof error.message === 'string' && error.message.trim()
       ? sanitizeErrorMessage(error.message)
       : ''
-  error.message = safeMessage || GENERIC_REQUEST_ERROR
-
   const method = error.config?.method
-  if (error.config) {
-    error.config = (method ? { method } : {}) as typeof error.config
-  }
-  error.request = undefined
-  error.cause = undefined
+  const safeMethod =
+    typeof method === 'string' && /^(?:get|post|put|patch|delete|head|options)$/i.test(method)
+      ? method
+      : undefined
+  const safeConfig = error.config
+    ? ((safeMethod ? { method: safeMethod } : {}) as NonNullable<AxiosError['config']>)
+    : undefined
+  const originalResponse = error.response
+  const safeResponse = originalResponse
+    ? ({
+        data: sanitizeTransportValue(originalResponse.data),
+        status: originalResponse.status,
+        statusText: '',
+        headers: {},
+        config: safeConfig || {},
+      } as typeof originalResponse)
+    : undefined
 
-  if (error.response) {
-    error.response.headers = {} as typeof error.response.headers
-    error.response.config = (error.config || {}) as typeof error.response.config
-    error.response.request = undefined
-    if (typeof error.response.data === 'string') {
-      error.response.data = (sanitizeErrorMessage(error.response.data) || '[REDACTED]') as typeof error.response.data
-    } else if (Array.isArray(error.response.data) || isRecord(error.response.data)) {
-      error.response.data = redactJsonValue(error.response.data) as typeof error.response.data
-    }
+  // 新建白名单 Error，避免原 AxiosError 的已缓存 stack、toJSON 或自定义可枚举字段泄漏。
+  const safeError = new Error(safeMessage || GENERIC_REQUEST_ERROR) as AxiosError
+  safeError.name = 'AxiosError'
+  if (typeof error.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)) {
+    safeError.code = error.code
   }
-  return error
+  safeError.config = safeConfig
+  safeError.request = undefined
+  safeError.response = safeResponse
+  safeError.status = Number.isInteger(error.status)
+    ? error.status
+    : originalResponse?.status
+  safeError.cause = undefined
+  safeError.isAxiosError = true
+  safeError.toJSON = () => ({
+    name: safeError.name,
+    message: safeError.message,
+    code: safeError.code,
+    status: safeError.status,
+    config: safeError.config,
+    response: safeResponse
+      ? {
+          data: safeResponse.data,
+          status: safeResponse.status,
+          statusText: '',
+          headers: {},
+          config: safeResponse.config,
+        }
+      : undefined,
+  })
+  return safeError
 }
 
 // ===== Token 续期：单飞锁 + 失败请求重放队列 =====

@@ -193,7 +193,7 @@ function nullableNonNegativeNumber(endpoint: string, value: unknown): number | n
 }
 
 function requiredNonNegativeInteger(endpoint: string, value: unknown): number {
-  if (!Number.isInteger(value) || (value as number) < 0) fail(endpoint)
+  if (!Number.isSafeInteger(value) || (value as number) < 0) fail(endpoint)
   return value as number
 }
 
