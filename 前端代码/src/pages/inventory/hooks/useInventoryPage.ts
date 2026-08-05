@@ -99,12 +99,12 @@ export function useInventoryPage() {
         pageSize: params.pageSize,
         keyword: keyword || undefined,
       })
-      const list = (res?.list || []).map((item: any) => ({
+      const list = res.list.map((item: any) => ({
         ...item,
         batch: item.batch || item.batchNo || '-',
         expiry: item.expiry || item.expiryDate || '-',
       })) as InventoryRow[]
-      return { list, pagination: res?.pagination }
+      return { list, pagination: res.pagination }
     },
     [keyword]
   )
@@ -146,21 +146,21 @@ export function useInventoryPage() {
   const fetchProjects = useCallback(async () => {
     try {
       const res: any = await projectApi.getList({ pageSize: 999 })
-      setProjectList(res?.list || [])
+      setProjectList(res.list)
     } catch (e) {
-      console.error(e)
+      console.error((e as Error)?.message)
     }
   }, [])
 
   const fetchUsers = useCallback(async () => {
     try {
       const res: any = await userApi.getList({ pageSize: 999 })
-      setUserList((res?.list || []).map((u: any) => ({
+      setUserList(res.list.map((u: any) => ({
         id: u.id,
         real_name: u.realName || u.real_name || u.username,
       })))
     } catch (e) {
-      console.error(e)
+      console.error((e as Error)?.message)
     }
   }, [])
 
@@ -168,9 +168,9 @@ export function useInventoryPage() {
     setBomLoading(true)
     try {
       const res: any = await bomApi.getList({ pageSize: 999 })
-      setBomList(res?.list || [])
+      setBomList(res.list)
     } catch (e) {
-      console.error(e)
+      console.error((e as Error)?.message)
     } finally {
       setBomLoading(false)
     }
@@ -184,18 +184,18 @@ export function useInventoryPage() {
     setBomLoading(true)
     try {
       const res: any = await bomApi.getDetail(bomId)
-      const materials = (res?.materials || []).map((m: any) => ({
+      const materials = res.materials.map((m: any) => ({
         id: m.id,
         code: m.code || '-',
         name: m.name,
         spec: m.spec || '-',
         unit: m.unit || '-',
-        stock: m.stock || 0,
-        usagePerSample: m.usagePerSample || 0,
+        stock: m.stock,
+        usagePerSample: m.usagePerSample,
       }))
       setBomMaterials(materials)
     } catch (e) {
-      console.error(e)
+      console.error((e as Error)?.message)
     } finally {
       setBomLoading(false)
     }
@@ -355,18 +355,18 @@ export function useInventoryPage() {
     setMaterialLoading(true)
     try {
       const res: any = await materialApi.getList({ page: 1, pageSize: 100 })
-      const list = (res?.list || []).map((item: any) => ({
+      const list = res.list.map((item: any) => ({
         id: item.id,
         code: item.code || '-',
         name: item.name,
         spec: item.spec || '-',
-        categoryName: item.categoryName || item.category || '-',
+        categoryName: item.categoryName || item.categoryPath || '-',
         unit: item.unit || '-',
-        stock: item.stock || 0,
+        stock: item.stock,
       }))
       setMaterialList(list)
     } catch (e) {
-      console.error(e)
+      console.error((e as Error)?.message)
     } finally {
       setMaterialLoading(false)
     }

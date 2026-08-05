@@ -52,6 +52,76 @@ function logoutAndRedirect() {
   window.location.href = '/login'
 }
 
+// ===== 展示层脱敏（Issue71）=====
+const SENSITIVE_KEY_PATTERN =
+  /(?:authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential)/i
+const SENSITIVE_MARKER_PATTERN =
+  /(authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential|Bearer|Basic|Digest|NTLM|Negotiate)/i
+const CREDENTIAL_SCHEME_PATTERN = /\b(?:Bearer|Basic|Digest|NTLM|Negotiate)\s+[^\s,;}\]]+/gi
+const DIGEST_PAIR_PATTERN = /\b(?:username|response|uri|nc|cnonce|qop|algorithm|opaque|realm)\s*=\s*"[^"]*"/gi
+const LONG_TOKEN_PATTERN = /[A-Za-z0-9+/]{40,}={0,2}/g
+const SENSITIVE_KEY_VALUE_PATTERN =
+  /(["']?)(authorization|auth|password|passwd|pwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|credential)\1\s*[:=]\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|([^\s,;}\]]+))/gi
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** 非 JSON 文本的保守清洗：先解转义引号，再遮凭据 scheme 与敏感键值对。 */
+function redactConservativeText(text: string): string {
+  const normalized = text.replace(/\\"/g, '"').replace(/\\'/g, "'")
+  const noSchemes = normalized
+    .replace(CREDENTIAL_SCHEME_PATTERN, '[REDACTED]')
+    .replace(DIGEST_PAIR_PATTERN, '[REDACTED]')
+  return noSchemes.replace(SENSITIVE_KEY_VALUE_PATTERN, '[REDACTED]')
+}
+
+function hasSensitiveMarker(text: string): boolean {
+  return SENSITIVE_MARKER_PATTERN.test(text) || LONG_TOKEN_PATTERN.test(text)
+}
+
+/** 可识别 JSON 的递归清洗：敏感键值整值替换为 [REDACTED]，普通字段保留。 */
+function redactJsonValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return '[REDACTED]'
+  if (Array.isArray(value)) return value.map((item) => redactJsonValue(item, depth + 1))
+  if (isRecord(value)) {
+    const out: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = SENSITIVE_KEY_PATTERN.test(key) ? '[REDACTED]' : redactJsonValue(item, depth + 1)
+    }
+    return out
+  }
+  if (typeof value === 'string') return redactConservativeText(value)
+  return value
+}
+
+/**
+ * 把后端错误原文转成可展示的安全文案。
+ * - 可识别 JSON：安全解析 + 递归清洗后返回；
+ * - 非 JSON：保守清洗；若无法证明原文已安全（敏感标记仍在），返回空串，
+ *   调用方必须回退固定通用文案，禁止回显原始错误。
+ */
+export function sanitizeErrorMessage(input: string): string {
+  const trimmed = input.trim()
+  if (!trimmed) return ''
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    parsed = undefined
+  }
+  if (parsed !== undefined) {
+    return JSON.stringify(redactJsonValue(parsed))
+  }
+
+  const redacted = redactConservativeText(trimmed).trim()
+  if (!redacted) return ''
+  if (hasSensitiveMarker(trimmed) && (redacted === trimmed || hasSensitiveMarker(redacted))) {
+    return ''
+  }
+  return redacted
+}
+
 // ===== Token 续期：单飞锁 + 失败请求重放队列 =====
 let isRefreshing = false
 let pendingQueue: Array<(token: string | null) => void> = []
@@ -99,12 +169,50 @@ request.interceptors.response.use(
   (response) => {
     const { data } = response
     if (!data.success) {
-      toast.error(data.error?.message || '操作失败')
-      return Promise.reject(data.error)
+      const rawError: unknown = data.error
+      if (typeof rawError === 'string') {
+        const safe = sanitizeErrorMessage(rawError)
+        const message = safe || '操作失败'
+        toast.error(message)
+        return Promise.reject({ message })
+      }
+      if (isRecord(rawError)) {
+        const rawMessage = typeof rawError.message === 'string' ? rawError.message : ''
+        const safe = sanitizeErrorMessage(rawMessage)
+        const message = safe || '操作失败'
+        toast.error(message)
+        const sanitized = redactJsonValue(rawError) as Record<string, unknown>
+        sanitized.message = message
+        return Promise.reject(sanitized)
+      }
+      toast.error('操作失败')
+      return Promise.reject({ message: '操作失败' })
     }
     return data.data
   },
   async (error: AxiosError) => {
+    const responseError = (error.response?.data as { error?: unknown } | undefined)?.error
+    let safeBackendMessage: string | undefined
+    if (isRecord(responseError) && typeof responseError.message === 'string') {
+      const safe = sanitizeErrorMessage(responseError.message)
+      if (safe) {
+        responseError.message = safe
+        safeBackendMessage = safe
+      } else {
+        responseError.message = '请求失败，请稍后重试'
+        safeBackendMessage = '请求失败，请稍后重试'
+      }
+    }
+    if (error.response && isRecord(error.response.data)) {
+      error.response.data = redactJsonValue(error.response.data) as typeof error.response.data
+    }
+    if (typeof error.message === 'string' && error.message.trim()) {
+      const safe = sanitizeErrorMessage(error.message)
+      if (safe && safe !== error.message) {
+        error.message = safe
+      }
+    }
+
     const status = error.response?.status
     const originalConfig = error.config as
       | (AxiosRequestConfig & { _retried?: boolean; url?: string })
@@ -158,10 +266,7 @@ request.interceptors.response.use(
       }
     }
 
-    const msg = error.response?.data
-      ? (error.response.data as any)?.error?.message
-      : undefined
-    toast.error(msg || error.message || '网络错误')
+    toast.error(safeBackendMessage || error.message || '网络错误')
     return Promise.reject(error)
   }
 )

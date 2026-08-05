@@ -80,6 +80,7 @@ export function useBOMPage() {
   const {
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -95,8 +96,8 @@ export function useBOMPage() {
         status: effectiveStatus,
       })
       return {
-        list: res?.list || [],
-        pagination: res?.pagination,
+        list: res.list,
+        pagination: res.pagination,
       }
     },
     initialPage,
@@ -204,13 +205,11 @@ export function useBOMPage() {
   const openDetail = async (row: BOM) => {
     try {
       const res: any = await bomApi.getDetail(row.id)
-      setDetailBom(res.data || row)
+      setDetailBom(res)
       setDetailTab('info')
       setModalType('detail')
     } catch {
-      setDetailBom(row)
-      setDetailTab('info')
-      setModalType('detail')
+      /* Issue71 fail-closed：详情失败时不把列表行冒充详情、不打开详情弹窗 */
     }
   }
 
@@ -286,19 +285,25 @@ export function useBOMPage() {
     }
     try {
       const source: any = await bomApi.getDetail(editingId)
-      const payload: Partial<BOM> = {
+      const payload = {
         code: '',
         name: copyForm.name.trim(),
         version: 'v1.0',
-        type: source.data?.type || 'he',
-        serviceId: copyForm.copyInfo ? source.data?.serviceId : undefined,
-        description: copyForm.copyInfo ? source.data?.description : undefined,
+        type: source.type || 'he',
+        serviceId: copyForm.copyInfo ? source.serviceId : undefined,
+        description: copyForm.copyInfo ? source.description : undefined,
         status: 'active',
-        materialCount: copyForm.copyMaterials ? source.data?.materialCount || 0 : 0,
-        unitCost: copyForm.copyMaterials ? source.data?.unitCost || 0 : 0,
-        materials: copyForm.copyMaterials ? source.data?.materials : undefined,
+        materialCount: copyForm.copyMaterials ? source.materials.length : 0,
+        unitCost: copyForm.copyMaterials && source.unitCost != null ? source.unitCost : undefined,
+        materials: copyForm.copyMaterials
+          ? source.materials.map((m: any) => ({
+              materialId: m.id,
+              usagePerSample: m.usagePerSample,
+              unit: m.unit ?? undefined,
+            }))
+          : undefined,
       }
-      await bomApi.create(payload)
+      await bomApi.create(payload as unknown as Partial<BOM>)
       toast.success('BOM复制成功')
       setModalType(null)
       refresh()
@@ -345,6 +350,7 @@ export function useBOMPage() {
     effectiveStatus,
     data,
     loading,
+    error,
     page,
     pageSize,
     total,

@@ -48,7 +48,7 @@ export function useMaterialsPage() {
         params.status = quickFilter
       }
       const res: any = await materialApi.getList(params)
-      let list: Material[] = res.list || []
+      let list: Material[] = res.list
       if (quickFilter === 'low-stock') {
         list = list.filter((m: Material) => m.stock <= m.minStock)
       }
@@ -112,9 +112,9 @@ export function useMaterialsPage() {
         categoryApi.getList({ page: 1, pageSize: 999 }),
         supplierApi.getList({ page: 1, pageSize: 999 }),
       ])
-      setCategories(catRes?.list || [])
-      setSuppliers(supRes?.list || [])
-    } catch (e) { console.error(e) }
+      setCategories(catRes.list)
+      setSuppliers(supRes.list)
+    } catch (e) { console.error((e as Error)?.message) }
   }
 
   useEffect(() => { fetchRefs() }, [])
@@ -137,8 +137,8 @@ export function useMaterialsPage() {
     if (!categoryId) return
     try {
       const res: any = await materialApi.getNextCode(categoryId)
-      if (res.data?.code) {
-        setForm(prev => ({ ...prev, code: res.data.code }))
+      if (res.code) {
+        setForm(prev => ({ ...prev, code: res.code }))
       }
     } catch (e) { /* ignore */ }
   }, [])

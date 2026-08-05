@@ -88,7 +88,7 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                 <div>
                   <div className="text-xs text-gray-500 mb-1">物料数量</div>
                   <div className="text-sm text-gray-900">
-                    {bom.materialCount ?? 0} 项
+                    {typeof bom.materialCount === 'number' ? bom.materialCount : '未知'} 项
                   </div>
                 </div>
                 <div>
@@ -138,7 +138,10 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                           let stockStatus = '充足'
                           let stockClass =
                             'bg-green-50 text-green-600 border-green-200'
-                          if (m.stock <= 0) {
+                          if (typeof m.stock !== 'number') {
+                            stockStatus = '未知'
+                            stockClass = 'bg-gray-50 text-gray-500 border-gray-200'
+                          } else if (m.stock <= 0) {
                             stockStatus = '不足'
                             stockClass =
                               'bg-red-50 text-red-600 border-red-200'
@@ -174,6 +177,15 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                             </tr>
                           )
                         })
+                      ) : !Array.isArray(bom.materials) ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-8 text-center text-gray-400"
+                          >
+                            物料数据不可用
+                          </td>
+                        </tr>
                       ) : (
                         <tr>
                           <td
@@ -191,8 +203,8 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                           colSpan={6}
                           className="px-4 py-2.5 text-right text-sm text-gray-600"
                         >
-                          共 {bom.materialCount ?? 0} 项物料
-                          {bom.unitCost > 0 &&
+                        共 {typeof bom.materialCount === 'number' ? bom.materialCount : '未知'} 项物料
+                          {typeof bom.unitCost === 'number' && bom.unitCost > 0 &&
                             ` | 单样本成本 ¥${bom.unitCost.toFixed(2)}`}
                         </td>
                       </tr>
@@ -238,6 +250,15 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                         </td>
                       </tr>
                     ))
+                  ) : !Array.isArray(bom.versionHistory) ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-4 py-8 text-center text-gray-400"
+                      >
+                        版本历史数据不可用
+                      </td>
+                    </tr>
                   ) : (
                     <tr>
                       <td

@@ -172,4 +172,73 @@ describe('request', () => {
     const error = { message: 'Network Error' }
     await expect(responseRejected(error)).rejects.toThrow('Network Error')
   })
+
+  describe('Issue71 错误展示脱敏', () => {
+    it('authorization=Basic 凭据值不得��传（只遮 Basic 不算修）', () => {
+      const raw = 'authorization=Basic dXNlcjpwYXNzd29yZA=='
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('dXNlcjpwYXNzd29yZA==')
+      expect(out).not.toContain('Basic dXNlcjpwYXNzd29yZA==')
+    })
+
+    it("单引号嵌套敏感键值 {'password': 'private-password'} 不得透传", () => {
+      const raw = "{'password': 'private-password'}"
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('private-password')
+      expect(out).not.toContain('password')
+    })
+
+    it('转义引号嵌套敏感键不得透传', () => {
+      const raw = '{\\"password\\":\\"private-password\\"}'
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('private-password')
+      expect(out).not.toContain('password')
+    })
+
+    it('Bearer / Digest 凭据值不得透传', () => {
+      const raw = 'Bearer eyJhbGciOiJIUzI1NiJ9.abc.def'
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('eyJhbGciOiJIUzI1NiJ9.abc.def')
+      const digest = 'Digest username="u", response="deadbeef1234567890"'
+      const out2 = mod.sanitizeErrorMessage(digest)
+      expect(out2).not.toContain('deadbeef1234567890')
+    })
+
+    it('可识别 JSON 优先安全解析并递归清洗，普通字段保留', () => {
+      const raw = JSON.stringify({
+        data: { token: 'abc.def', password: 'x' },
+        message: 'ok',
+      })
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).toContain('"token":"[REDACTED]"')
+      expect(out).toContain('"password":"[REDACTED]"')
+      expect(out).toContain('"message":"ok"')
+      expect(out).not.toContain('abc.def')
+      expect(out).not.toContain('"x"')
+    })
+
+    it('无敏感标记的普通文案原样保留', () => {
+      const raw = '服务暂时不可用，请稍后重试'
+      expect(mod.sanitizeErrorMessage(raw)).toBe(raw)
+    })
+
+    it('无法证明安全的非 JSON 敏感文本回退固定通用文案（空串）', () => {
+      const raw = 'password is hunter2'
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('hunter2')
+      expect(out).toBe('')
+    })
+
+    it('拦截器 reject 负载不携带原始敏感 message', async () => {
+      const response = {
+        data: {
+          success: false,
+          error: { message: 'authorization=Basic dXNlcjpwYXNzd29yZA==' },
+        },
+      }
+      await expect(responseFulfilled(response)).rejects.toMatchObject({
+        message: expect.not.stringContaining('dXNlcjpwYXNzd29yZA=='),
+      })
+    })
+  })
 })

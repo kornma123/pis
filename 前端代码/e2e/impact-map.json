@@ -234,6 +234,21 @@
       "specs": ["e2e/critical/report-change-truth.spec.ts"]
     },
     {
+      "id": "bom-master-truth",
+      "tier": "critical",
+      "owner": "inventory",
+      "sources": [
+        "前端代码/src/api/master.ts",
+        "前端代码/src/api/master-parsers.ts",
+        "前端代码/src/api/request.ts",
+        "前端代码/src/pages/bom/**",
+        "前端代码/src/pages/inventory/hooks/useInventoryPage.ts",
+        "前端代码/src/pages/master/hooks/useMaterialsPage.tsx",
+        "前端代码/src/pages/master/hooks/useProjectsPage.ts"
+      ],
+      "specs": ["e2e/critical/bom-master-truth.spec.ts"]
+    },
+    {
       "id": "legacy-pages",
       "tier": "legacy",
       "owner": "feature-owner-required",

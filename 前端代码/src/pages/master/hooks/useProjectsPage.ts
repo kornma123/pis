@@ -57,7 +57,10 @@ export function useProjectsPage() {
         type: typeFilter || undefined,
         status: statusFilter || undefined,
         bomFilter: bomFilter || undefined,
-      }),
+      }) as unknown as Promise<{
+        list: Project[]
+        pagination?: { total: number; page: number; pageSize: number }
+      }>,
     deps: [keyword, typeFilter, statusFilter, bomFilter],
   })
 
@@ -90,8 +93,8 @@ export function useProjectsPage() {
   const fetchBoms = async () => {
     try {
       const res: any = await bomApi.getList({ page: 1, pageSize: 999 })
-      setBoms(res.list || [])
-    } catch (e) { console.error(e) }
+      setBoms(res.list)
+    } catch (e) { console.error((e as Error)?.message) }
   }
 
   const stats = useMemo(() => {
@@ -235,5 +238,6 @@ export function useProjectsPage() {
     toggleSelectAll, toggleSelectOne,
     batchEnable, batchDisable,
     selectedBom,
+    fetchBoms,
   }
 }

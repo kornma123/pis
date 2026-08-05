@@ -299,7 +299,7 @@ export function BOMTable({
                       {row.version || '-'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {row.materialCount ?? 0}
+                      {typeof row.materialCount === 'number' ? row.materialCount : '未知'}
                     </td>
                     <td className={`px-4 py-3 ${supportableClass}`}>
                       {supportable !== undefined && supportable !== null
