@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { generateNo } from './generateNo.js'
+import { shanghaiBusinessMonth } from './business-time.js'
 
 export interface CostExceptionInput {
   sourceModule: string
@@ -52,7 +53,7 @@ export function recordCostException(db: any, input: CostExceptionInput): CostExc
     input.projectId || null,
     input.bomId || null,
     input.outboundId || null,
-    input.yearMonth || new Date().toISOString().slice(0, 7),
+    input.yearMonth || shanghaiBusinessMonth(),
     input.exceptionType,
     input.severity || 'warning',
     input.status || 'open',

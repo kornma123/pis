@@ -11,6 +11,7 @@ import {
   isIdempotencyConflict,
 } from '../utils/idempotency.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
+import { shanghaiBusinessMonth } from '../utils/business-time.js'
 import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { recordOverride } from '../utils/override-log.js'
@@ -51,6 +52,7 @@ function recordLedgerDrift(db: any, outboundId: string, oi: any, operator: strin
   try {
     recordCostException(db, {
       sourceModule: 'outbound', sourceType: 'ledger_drift', sourceId: outboundId, outboundId,
+      yearMonth: shanghaiBusinessMonth(),
       exceptionType: 'ledger_drift', severity: 'warning',
       message: `库存台账漂移：物料缺可消耗批次，单位成本按${srcLabel}兜底（绝不静默按 0 计）`,
       details: { materialId: oi.materialId, unitCost: oi.unitCost, costSource: oi.costSource, note: oi.costNote, quantity: oi.quantity },
