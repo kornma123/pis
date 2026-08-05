@@ -113,6 +113,10 @@ describe('PIS-INV-G01 route-wide position cutover', () => {
     ])
     expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(ids.material) as any).stock).toBe(5)
 
+    const malformedUpdate = await auth(request(app).put(`/api/v1/outbound/${out.body.data.id}`)).send({ items: [] })
+    expect(malformedUpdate.status).toBe(409)
+    expect(malformedUpdate.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+
     const update = await auth(request(app).put(`/api/v1/outbound/${out.body.data.id}`)).send({
       type: 'direct', items: [{ materialId: ids.material, quantity: 1 }],
     })
@@ -314,6 +318,126 @@ describe('PIS-INV-G01 route-wide position cutover', () => {
       SELECT batch_id, location_id, quantity FROM inventory_transaction_allocations
       WHERE operation_kind = 'inbound' AND owner_id = ?
     `).get(inboundId)).toEqual({ batch_id: null, location_id: ids.locA, quantity: 4 })
+  })
+
+  it('rejects a pending transfer record through the generic inbound completion route with zero writes', async () => {
+    const ids = seed()
+    const transferId = `PENDING-TRANSFER-${Date.now()}-${sequence++}`
+    db.prepare(`
+      INSERT INTO inbound_records
+        (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount,
+         supplier_id, location_id, from_location_id, operator, status)
+      VALUES (?, ?, 'transfer', ?, 'TRANSFER-LOT', 5, 'pcs', 0, 0,
+        ?, ?, ?, 'position-test', 'pending')
+    `).run(transferId, transferId, ids.material, ids.supplier, ids.locB, ids.locA)
+
+    const completed = await auth(request(app).put(`/api/v1/inbound/${transferId}`)).send({
+      status: 'completed',
+      materialId: ids.material,
+      batchNo: 'TRANSFER-LOT',
+      quantity: 5,
+      price: 0,
+      supplierId: ids.supplier,
+      locationId: ids.locB,
+    })
+
+    expect(completed.status).toBe(409)
+    expect(completed.body.error.code).toBe('ROUTE_OWNERSHIP_VIOLATION')
+    expect(positions(ids.material)).toEqual([])
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(ids.material) as any).stock).toBe(0)
+    expect((db.prepare('SELECT status FROM inbound_records WHERE id = ?').get(transferId) as any).status).toBe('pending')
+    expect((db.prepare(`
+      SELECT COUNT(*) AS count FROM inventory_transaction_allocations WHERE owner_id = ?
+    `).get(transferId) as any).count).toBe(0)
+
+    const ordinaryId = `PENDING-DIRECT-${Date.now()}-${sequence++}`
+    db.prepare(`
+      INSERT INTO inbound_records
+        (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount,
+         supplier_id, location_id, operator, status)
+      VALUES (?, ?, 'direct', ?, 'DIRECT-LOT', 2, 'pcs', 0, 0,
+        ?, ?, 'position-test', 'pending')
+    `).run(ordinaryId, ordinaryId, ids.material, ids.supplier, ids.locB)
+    const retagged = await auth(request(app).put(`/api/v1/inbound/${ordinaryId}`)).send({
+      type: 'transfer',
+      status: 'completed',
+      materialId: ids.material,
+      batchNo: 'DIRECT-LOT',
+      quantity: 2,
+      price: 0,
+      supplierId: ids.supplier,
+      locationId: ids.locB,
+    })
+    expect(retagged.status).toBe(409)
+    expect(retagged.body.error.code).toBe('ROUTE_OWNERSHIP_VIOLATION')
+    expect(positions(ids.material)).toEqual([])
+    expect((db.prepare('SELECT type, status FROM inbound_records WHERE id = ?').get(ordinaryId) as any))
+      .toEqual({ type: 'direct', status: 'pending' })
+  })
+
+  it('preserves an explicit zero-slot location capacity and blocks the first addition', async () => {
+    const ids = seed()
+    const created = await auth(request(app).post('/api/v1/locations')).send({
+      name: 'zero-capacity', zone: 'Z', capacity: 0,
+    })
+    expect(created.status).toBe(201)
+    const locationId = created.body.data.id
+    expect((db.prepare('SELECT capacity FROM locations WHERE id = ?').get(locationId) as any).capacity).toBe(0)
+
+    const receipt = await inbound(ids, {
+      locationId, quantity: 1, batchNo: 'ZERO-CAPACITY', expiryDate: '2027-01-01',
+    })
+    expect(receipt.status).toBe(422)
+    expect(receipt.body.error.code).toBe('LOCATION_CAPACITY_EXCEEDED')
+    expect(positions(ids.material)).toEqual([])
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(ids.material) as any).stock).toBe(0)
+  })
+
+  it('keeps inventory status filters queryable after position aggregation', async () => {
+    const ids = seed()
+    db.prepare('UPDATE materials SET min_stock = 5 WHERE id = ?').run(ids.material)
+    expect((await inbound(ids, {
+      locationId: ids.locA, quantity: 1, batchNo: 'LOW-STOCK', expiryDate: '2027-01-01',
+    })).status).toBe(201)
+
+    const filtered = await auth(request(app).get('/api/v1/inventory?status=low-stock'))
+    expect(filtered.status).toBe(200)
+    expect(filtered.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(true)
+
+    db.prepare("UPDATE batches SET expiry_date = date('now', '-1 day') WHERE material_id = ?").run(ids.material)
+    const expired = await auth(request(app).get('/api/v1/inventory?status=expired'))
+    expect(expired.status).toBe(200)
+    expect(expired.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(true)
+
+    db.prepare("UPDATE batches SET expiry_date = date('now', '+10 days') WHERE material_id = ?").run(ids.material)
+    const expiringSoon = await auth(request(app).get('/api/v1/inventory?status=expiring-soon'))
+    expect(expiringSoon.status).toBe(200)
+    expect(expiringSoon.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(true)
+  })
+
+  it('rejects conversion precision that the position planner cannot represent', async () => {
+    const ids = seed()
+    const created = await auth(request(app).post('/api/v1/materials')).send({
+      name: 'poison conversion',
+      unit: 'pcs',
+      categoryId: ids.category,
+      unitsPerPackage: 0.00001,
+      slotsPerPackage: 1,
+    })
+    expect(created.status).toBe(400)
+    expect(created.body.error.code).toBe('INVALID_PARAMETER')
+
+    const updated = await auth(request(app).put(`/api/v1/materials/${ids.material}`)).send({
+      slotsPerPackage: 0.00001,
+    })
+    expect(updated.status).toBe(400)
+    expect(updated.body.error.code).toBe('INVALID_PARAMETER')
+
+    expect(() => db.prepare(`
+      INSERT INTO materials
+        (id, code, name, unit, category_id, batch_managed, units_per_package, slots_per_package)
+      VALUES (?, ?, 'direct poison', 'pcs', ?, 0, 0.00001, 1)
+    `).run(`POISON-${sequence}`, `POISON-${sequence++}`, ids.category)).toThrow()
   })
 
   it('keeps completed inbound cancellation and deletion inside the G2 boundary with zero quantity writes', async () => {

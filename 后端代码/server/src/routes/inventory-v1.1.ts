@@ -6,7 +6,10 @@ const router = Router()
 
 // Helper: 获取最早过期批次的 batch_no 和 expiry_date
 function getBatchSubQuery(field: string): string {
-  return `(SELECT b.${field} FROM batches b WHERE b.material_id = i.material_id AND b.status = 1 AND b.remaining > 0 ORDER BY b.expiry_date ASC LIMIT 1)`
+  return `(SELECT b.${field} FROM batches b
+    WHERE b.material_id = i.material_id
+      AND EXISTS (SELECT 1 FROM inventory_positions bp WHERE bp.batch_id = b.id AND bp.quantity > 0)
+    ORDER BY COALESCE(b.expiry_date, '9999-12-31'), b.created_at, b.batch_no, b.id LIMIT 1)`
 }
 
 router.get('/', (req, res) => {
@@ -26,14 +29,28 @@ router.get('/', (req, res) => {
       params.push(locationId)
     }
 
-    let having = ''
+    let statusWhere = ''
     if (status === 'low-stock') {
-      having = ' HAVING i.stock <= m.min_stock AND m.min_stock > 0'
+      statusWhere = ` AND COALESCE((
+        SELECT SUM(ps.quantity) FROM inventory_positions ps WHERE ps.material_id = i.material_id
+      ), 0) <= m.min_stock AND m.min_stock > 0`
     } else if (status === 'expired') {
-      having = ' HAVING expiry IS NOT NULL AND expiry != \'\' AND expiry <= date(\'now\')'
+      statusWhere = ` AND EXISTS (
+        SELECT 1 FROM batches bs
+        WHERE bs.material_id = i.material_id
+          AND EXISTS (SELECT 1 FROM inventory_positions ps WHERE ps.batch_id = bs.id AND ps.quantity > 0)
+          AND bs.expiry_date IS NOT NULL AND bs.expiry_date != '' AND bs.expiry_date <= date('now')
+      )`
     } else if (status === 'expiring-soon') {
-      having = ' HAVING expiry IS NOT NULL AND expiry != \'\' AND expiry > date(\'now\') AND expiry <= date(\'now\', \'+30 days\')'
+      statusWhere = ` AND EXISTS (
+        SELECT 1 FROM batches bs
+        WHERE bs.material_id = i.material_id
+          AND EXISTS (SELECT 1 FROM inventory_positions ps WHERE ps.batch_id = bs.id AND ps.quantity > 0)
+          AND bs.expiry_date IS NOT NULL AND bs.expiry_date != ''
+          AND bs.expiry_date > date('now') AND bs.expiry_date <= date('now', '+30 days')
+      )`
     }
+    where += statusWhere
 
     const countSql = `
       SELECT COUNT(*) as total FROM (
@@ -41,7 +58,6 @@ router.get('/', (req, res) => {
         FROM inventory i
         JOIN materials m ON i.material_id = m.id
         WHERE ${where}
-        ${having}
       ) t
     `
     const count = (db.prepare(countSql).get(...params) as any)?.total || 0
@@ -59,7 +75,6 @@ router.get('/', (req, res) => {
       JOIN materials m ON i.material_id = m.id AND m.is_deleted = 0
       LEFT JOIN suppliers s ON m.supplier_id = s.id AND s.is_deleted = 0
       WHERE ${where}
-      ${having}
       ORDER BY i.update_time DESC
       LIMIT ? OFFSET ?
     `

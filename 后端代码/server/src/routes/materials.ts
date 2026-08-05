@@ -26,7 +26,13 @@ function parseFiniteNonNegativeNumber(value: unknown): number | null {
 function parseOptionalPositiveNumber(value: unknown): number | null | undefined {
   if (value === undefined || value === null || value === '') return value === undefined ? undefined : null
   const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+  const scaled = parsed * 10_000
+  return Number.isFinite(parsed)
+    && parsed > 0
+    && Number.isSafeInteger(Math.round(scaled))
+    && Math.abs(scaled - Math.round(scaled)) < 0.000001
+    ? parsed
+    : undefined
 }
 
 router.get('/', (req, res) => {

@@ -180,15 +180,12 @@ router.get('/:id/check-deletable', (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
     if (record.status !== 'completed') { success(res, { deletable: true }); return }
-    error(
-      res,
-      record.type === 'transfer'
-        ? 'Transfer records are immutable through the inbound route'
-        : 'Completed inventory facts require an append-only compensation chain',
-      record.type === 'transfer' ? 'ROUTE_OWNERSHIP_VIOLATION' : 'COMPENSATION_CHAIN_REQUIRED',
-      409,
-    )
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
   } catch (err: any) { error(res, err.message) }
 })
 
@@ -312,15 +309,16 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
+    if (req.body.type !== undefined && RESERVED_INBOUND_TYPES.has(req.body.type)) {
+      error(res, 'Reserved record types must use their dedicated route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
     if (record.status === 'completed') {
-      error(
-        res,
-        record.type === 'transfer'
-          ? 'Transfer records are immutable through the inbound route'
-          : 'Completed inventory facts require an append-only compensation chain',
-        record.type === 'transfer' ? 'ROUTE_OWNERSHIP_VIOLATION' : 'COMPENSATION_CHAIN_REQUIRED',
-        409,
-      )
+      error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
       return
     }
     const qty = req.body.quantity === undefined ? normalizeQuantity(record.quantity) : normalizeQuantity(req.body.quantity)
@@ -471,6 +469,10 @@ function cancelOrDeleteInbound(req: any, res: any, deleteRecord: boolean): void 
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
     if (record.status === 'completed') {
       error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
       return

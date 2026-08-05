@@ -82,14 +82,15 @@ router.post('/', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { name, type, parentId, zone, shelf, position, capacity } = req.body
     if (!name || !zone) { error(res, 'Name and zone required', 'INVALID_PARAMETER', 400); return }
-    if (capacity !== undefined && (!Number.isFinite(Number(capacity)) || Number(capacity) < 0)) {
+    const normalizedCapacity = capacity === undefined ? 999999 : Number(capacity)
+    if (!Number.isFinite(normalizedCapacity) || normalizedCapacity < 0) {
       error(res, 'Capacity must be a finite non-negative slot count', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
     const id = uuidv4()
     const finalCode = generateLocationCode(db)
     db.prepare('INSERT INTO locations (id, code, name, type, parent_id, zone, shelf, position, capacity, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)')
-      .run(id, finalCode, name, type || 'shelf', parentId || null, zone, shelf || null, position || null, capacity || 999999)
+      .run(id, finalCode, name, type || 'shelf', parentId || null, zone, shelf || null, position || null, normalizedCapacity)
     success(res, { id, code: finalCode }, 'Created', 201)
   } catch (err: any) {
     if (err.message.includes('UNIQUE')) { error(res, 'Code exists', 'RESOURCE_CONFLICT', 409); return }

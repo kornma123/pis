@@ -332,6 +332,18 @@ router.post('/', requireWriteAccess, (req, res) => {
 router.put('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
+    if (req.body?.type !== undefined && !isLiveOutboundType(req.body.type)) {
+      error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
+    }
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (record.type === 'bom') {
+      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
+    }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+    return
+
     const { type, projectId, items: newItems, remark } = req.body
     if ((type !== undefined && !isLiveOutboundType(type)) || !Array.isArray(newItems) || newItems.length === 0) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
@@ -345,15 +357,6 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       }
       normalizedNewItems.push({ ...item, quantity: normalizedQuantity })
     }
-
-    const db = getDatabase()
-    const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
-    if (record.type === 'bom') {
-      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
-    }
-    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
-    return
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + normalizedNewItems.map(() => '?').join(',') + ')').all(...normalizedNewItems.map((i: any) => i.materialId)) as any[]
     const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
