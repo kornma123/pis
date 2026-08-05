@@ -35,20 +35,14 @@ router.get('/', (req, res) => {
         SELECT SUM(ps.quantity) FROM inventory_positions ps WHERE ps.material_id = i.material_id
       ), 0) <= m.min_stock AND m.min_stock > 0`
     } else if (status === 'expired') {
-      statusWhere = ` AND EXISTS (
-        SELECT 1 FROM batches bs
-        WHERE bs.material_id = i.material_id
-          AND EXISTS (SELECT 1 FROM inventory_positions ps WHERE ps.batch_id = bs.id AND ps.quantity > 0)
-          AND bs.expiry_date IS NOT NULL AND bs.expiry_date != '' AND bs.expiry_date <= date('now')
-      )`
+      const earliestExpiry = getBatchSubQuery('expiry_date')
+      statusWhere = ` AND COALESCE(${earliestExpiry}, '') != ''
+        AND ${earliestExpiry} <= date('now')`
     } else if (status === 'expiring-soon') {
-      statusWhere = ` AND EXISTS (
-        SELECT 1 FROM batches bs
-        WHERE bs.material_id = i.material_id
-          AND EXISTS (SELECT 1 FROM inventory_positions ps WHERE ps.batch_id = bs.id AND ps.quantity > 0)
-          AND bs.expiry_date IS NOT NULL AND bs.expiry_date != ''
-          AND bs.expiry_date > date('now') AND bs.expiry_date <= date('now', '+30 days')
-      )`
+      const earliestExpiry = getBatchSubQuery('expiry_date')
+      statusWhere = ` AND COALESCE(${earliestExpiry}, '') != ''
+        AND ${earliestExpiry} > date('now')
+        AND ${earliestExpiry} <= date('now', '+30 days')`
     }
     where += statusWhere
 

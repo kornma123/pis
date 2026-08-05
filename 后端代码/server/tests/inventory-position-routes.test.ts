@@ -413,6 +413,19 @@ describe('PIS-INV-G01 route-wide position cutover', () => {
     const expiringSoon = await auth(request(app).get('/api/v1/inventory?status=expiring-soon'))
     expect(expiringSoon.status).toBe(200)
     expect(expiringSoon.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(true)
+
+    expect((await inbound(ids, {
+      locationId: ids.locB, quantity: 1, batchNo: 'ALREADY-EXPIRED', expiryDate: '2020-01-01',
+    })).status).toBe(201)
+    const mixedExpiringSoon = await auth(request(app).get('/api/v1/inventory?status=expiring-soon'))
+    expect(mixedExpiringSoon.status).toBe(200)
+    expect(mixedExpiringSoon.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(false)
+
+    const mixedExpired = await auth(request(app).get('/api/v1/inventory?status=expired'))
+    expect(mixedExpired.status).toBe(200)
+    const mixedExpiredRow = mixedExpired.body.data.list.find((row: any) => row.materialId === ids.material)
+    expect(mixedExpiredRow).toBeDefined()
+    expect(mixedExpiredRow.status).toBe('expired')
   })
 
   it('rejects conversion precision that the position planner cannot represent', async () => {
