@@ -1,10 +1,10 @@
 # COREONE Claude Code CLI 监督协议
 
 <!-- protocol-id: coreone-claude-code-cli-supervision/v3 -->
-<!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
+<!-- supervisor-defaults: effort=ultracode poll-seconds=600 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=within-next-poll session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
 <!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs test-harness=scripts/claude-cli-supervisor.test-harness.cjs production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
-<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
+<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed terminal-auto-focus=forbidden claude-version=live-probed-before-launch poll-min-seconds=600 visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
@@ -26,7 +26,7 @@
 
 两种模式都以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能伪报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。
 
-`native-task-bound` 只接受 Codex Desktop 原生 bridge 在同一进程给出的 capability；当前宿主缺该 bridge，所以该模式的生产 `run/answer/ack-stop` 仍非零退出。`external-visible-readonly` 只接受生产模块内建的 macOS Terminal 原生 adapter：自动启动先用 Terminal 自身 `do script` 新建一个前台专用窗口并回读 claim；`attach-existing` 则只附着已由用户准备好的精确可见 Claude 会话。它不会把自动启动命令投入不透明的已有 tab；每次操作前重新核对 Terminal、window id、selected tab 与 TTY，不加载调用方代码，也不使用 System Events/Accessibility 键盘注入。
+`native-task-bound` 只接受 Codex Desktop 原生 bridge 在同一进程给出的 capability；当前宿主缺该 bridge，所以该模式的生产 `run/answer/ack-stop` 仍非零退出。`external-visible-readonly` 只接受生产模块内建的 macOS Terminal 原生 adapter：显式 `claim` 会用 Terminal 自身 `do script` 新建一个专用窗口并回读 claim；`attach-existing` 则只附着已由用户准备好的精确可见 Claude 会话。监督器的状态读取、轮询和恢复核对禁止调用 `Terminal.activate()` 或调整窗口层级；写入前只被动核对 Terminal、window id、selected tab 与 TTY，目标窗口不在前台时 fail-closed，不替用户抢焦点。它不加载调用方代码，也不使用 System Events/Accessibility 键盘注入。
 
 自动启动前先单独领取专用窗口；该命令只返回动态回执，不启动 Claude：
 
@@ -55,7 +55,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
   "owned": ["scripts/example.cjs"],
   "excluded": ["前端代码/**", "后端代码/**"],
   "risk": "R1",
-  "questionTimeoutMs": 300000
+  "questionTimeoutMs": 600000
 }
 ```
 
@@ -72,7 +72,6 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
     "tty": "/dev/ttysNNN",
     "startup": "launch-in-dedicated-window",
     "claudeSessionId": "预生成 UUID",
-    "expectedClaudeVersion": "现场批准的精确版本",
     "expectedEffort": "现场批准且 transcript 可证明的 effort",
     "expectedPermissionMode": "bypassPermissions",
     "repositoryFullName": "owner/repo",
@@ -179,6 +178,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 ```
 
 - `native-task-bound` 的既有默认仍是 `ultracode`，在 native bridge 接线前不得伪称可运行。`external-visible-readonly` 不继承这个未经实际 session 证明的默认：启动参数必须等于 request 的 `expectedEffort`，并从 transcript 元数据读回相同值。当前 COREONE 固定 SHA 异构复核的已批准值为 `max`；除非 PM 后续对精确任务显式改变，不得降低。任何任务现场批准的 effort 都只是动态证据，不是跨设备常量。
+- request 只声明 `minimumClaudeVersion`，禁止携带 `expectedClaudeVersion` 锁死现场版本。监督器必须先在目标可见 shell 解析 `claude` 路径并执行 `claude --version`，确认达到最低版本后才允许构造启动命令；启动后 transcript 版本必须等于这次探针读到的版本。
 - Claude 版本按严格 SemVer 比较；prerelease 低于相同 core 的稳定版（例如 `2.0.0-beta.1 < 2.0.0`），不得只比较前三段数字后放行。
 - SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
 - effort 不在本机 `claude --help` 声明集合、启动后实际值不同或 transcript 无法确认时停止派单；不得因 `claude --effort <值> --version` 返回 0 就认定支持，也不得静默降级。
@@ -186,12 +186,12 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 - 必须在已经通过 canary 的同一可见终端以前台交互方式启动或复用。不得使用工具 PTY、`--print`、`--bg`、`nohup`、shell 后台符号、输出重定向、另开隐藏 Claude 或隐藏子任务代替。不得因 System Events 键盘注入缺 Accessibility 权限就要求用户改权限；使用 Terminal 自身的窗口/tab `do script` 接口，具体提交行为由 challenge 回读验收。
 - 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
 
-## 3. 输出消费与五分钟节奏
+## 3. 输出消费与十分钟硬下限
 
 - 始终复用已通过 canary 证明的同一桌面终端执行句柄和应用回读入口增量读取，不用重复启动 Claude，也不从工具 PTY、旧日志或另一终端推断当前状态。
-- Claude 正在执行且没有新输出时，控制者至少每 `300` 秒消费一次新增输出。优先使用“有输出立即唤醒、无输出最多等待五分钟”的宿主等待原语；不得用 `sleep 300` 阻塞控制面。宿主单次等待上限更短时，可以内部短轮询，但对外仍按五分钟无输出节奏管理。
-- 上述五分钟是回读/进度观测节奏，不是任务死线、失败判定或进程终止计时器。即使一次 canary 因 `max` effort 超过旧的 30 秒窗口，也只能按任务 wait budget 继续回读或保留可恢复状态，不得杀进程或降 effort。
-- 一旦出现新输出立即消费，不等五分钟整点。只处理上次 cursor 之后的增量，并持续读到当前提示符或稳定尾部，防止问题被截在半段。
+- Claude 正在执行时，稳态 transcript 轮询固定为每 `600` 秒一次；任何小于 `600000` 毫秒的轮询或 question timeout 配置直接拒绝。启动握手、同次写入回执和用户主动查询不是稳态轮询，但也不得通过后台短轮询冒充十分钟节奏。
+- 上述十分钟是回读/进度观测节奏，不是任务死线、失败判定或进程终止计时器。即使 K3 长时间无输出，也只能等到下一个十分钟采样点或保留可恢复状态，不得杀进程或降 effort。
+- 每次只处理上次 cursor 之后的增量，并持续读到当前提示符或稳定尾部，防止问题被截在半段。提问最迟在下一个十分钟采样点被发现；不得为追求更快响应把轮询下调。
 - 无变化的轮询不向用户刷屏；有新事实、问题、风险、验证结果或状态变化时才给简短进度。
 
 ## 4. 提问和等待是最高优先级中断
@@ -228,7 +228,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 | 当前状态 | 控制者动作 | 下一状态 |
 |---|---|---|
 | `STARTING` | 模式绑定 + 同 tab challenge-response、探针、实际 effort/permission/transcript 回读、记录 session id | `ACTIVE` / `BLOCKED` |
-| `ACTIVE` | 输出唤醒优先，最长五分钟消费增量 | `ACTIVE` / `WAITING_CONTROLLER` / `VERIFYING` |
+| `ACTIVE` | 每十分钟消费一次增量，禁止更短轮询 | `ACTIVE` / `WAITING_CONTROLLER` / `VERIFYING` |
 | `WAITING_CONTROLLER` | 立即回答原 CLI；需新增权限时才问用户 | `ACTIVE` / `BLOCKED` |
 | `VERIFYING` | 两次稳定读取 + 独立事实闸 | `ACTIVE` / `COMPLETE` / `BLOCKED` |
 | `BLOCKED` | 保留现场，说明缺失权限或外部条件 | 条件满足后回 `ACTIVE` |

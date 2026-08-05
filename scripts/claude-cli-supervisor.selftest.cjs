@@ -33,7 +33,7 @@ let failed = 0;
 let externalPassed = 0;
 let externalFailed = 0;
 const failedScenarios = [];
-const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
+const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=bypassPermissions evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed terminal-auto-focus=forbidden claude-version=live-probed-before-launch poll-min-seconds=600 visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
 const EXPECTED_SCENARIOS = Object.freeze([
   'queued terminal is not visible proof',
   'different app terminal handle fails closed',
@@ -43,6 +43,7 @@ const EXPECTED_SCENARIOS = Object.freeze([
   'wrong cwd or worktree fails before Claude launch',
   'missing Claude CLI fails before prompt injection',
   'old Claude CLI version fails closed',
+  'poll interval below ten minutes is rejected',
   'prerelease Claude CLI does not satisfy the matching stable minimum',
   'SemVer comparison is symmetric for integers beyond Number safe range',
   'unsupported ultracode effort cannot silently downgrade',
@@ -91,12 +92,13 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external typed authority questions cannot be downgraded or auto-answered',
   'external visible protocol extension marker is machine checked',
   'external startup separates lightweight handshake from Skill review delivery',
-  'external startup refocuses the exact visible surface before review delivery',
-  'external focus waits for macOS activation before a bound write',
+  'external startup never activates Terminal and fails closed before a background write',
+  'external passive transcript polling never activates Terminal',
   'external supervisor has no Claude termination path for slow work',
   'external visible canary uses the task wait budget for max effort',
   'external visible shell probe does not treat version success as effort proof',
   'external shell probe resolves Claude through the visible shell inherited PATH',
+  'external launch binds the live queried Claude version without a request lock',
   'external startup acceptance recovers one launched session without duplicate prompt',
   'external restart resumes the same visible session after the foreground process exits',
   'external supervision long-polls transcript updates instead of busy-spinning',
@@ -157,7 +159,7 @@ function request(overrides = {}) {
     owned: ['scripts/**'],
     excluded: ['前端代码/**', '后端代码/**'],
     risk: 'R1',
-    questionTimeoutMs: 300_000,
+    questionTimeoutMs: 600_000,
     ...overrides,
   };
 }
@@ -176,7 +178,6 @@ function externalRequest(overrides = {}) {
       tty: '/dev/ttys000',
       startup: 'launch-in-dedicated-window',
       claudeSessionId: '11111111-1111-4111-8111-111111111111',
-      expectedClaudeVersion: '2.1.220',
       expectedEffort: 'max',
       expectedPermissionMode: 'bypassPermissions',
       repositoryFullName: 'kornma123/pis',
@@ -250,6 +251,7 @@ function makeExternalRuntime(options = {}) {
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
   const permissionMode = options.permissionMode || 'bypassPermissions';
+  const claudeVersion = options.claudeVersion || '2.1.220';
   const tty = options.tty || '/dev/ttys000';
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
   let processCommand = options.processCommand ||
@@ -262,7 +264,7 @@ function makeExternalRuntime(options = {}) {
     recordCount: 10 + messages.length,
     metadata: {
       sessionId: '11111111-1111-4111-8111-111111111111',
-      claudeVersion: '2.1.220',
+      claudeVersion,
       cwd: '/repo',
       effort: 'max',
       permissionMode,
@@ -881,6 +883,22 @@ async function runExternalRestartCase(
     assert.equal(adapter.calls.launches.length, 0);
   });
 
+  await check('poll interval below ten minutes is rejected', async () => {
+    assert.equal(productionRuntime.DEFAULT_POLL_MS, 600_000);
+    assert.throws(
+      () => validateRequest(request({ questionTimeoutMs: 599_999 })),
+      (error) => {
+        assert.equal(error.reason, FAILURE.STATE_BINDING_MISMATCH);
+        assert.match(error.message, /at least 600000 milliseconds/);
+        return true;
+      },
+    );
+    assert.equal(
+      validateRequest(request({ questionTimeoutMs: 600_000 })).questionTimeoutMs,
+      600_000,
+    );
+  });
+
   await check('prerelease Claude CLI does not satisfy the matching stable minimum', async () => {
     const adapter = makeAdapter({
       probeResult: {
@@ -994,7 +1012,7 @@ async function runExternalRestartCase(
         .pendingQuestion;
       assert.equal(persistedQuestion.text, 'May I widen the owned scope?');
 
-      now += 300_001;
+      now += 600_001;
       const secondAdapter = makeAdapter({
         outputReads: [{
           cursor: 'question-2',
@@ -2095,7 +2113,7 @@ async function runExternalRestartCase(
           owned: ['seed.txt', 'prompt.txt', 'request.json', 'fake-adapter.cjs'],
           excluded: ['前端代码/**', '后端代码/**'],
           risk: 'R1',
-          questionTimeoutMs: 300_000,
+          questionTimeoutMs: 600_000,
         }, null, 2)}\n`,
       );
       const result = spawnSync(
@@ -2253,7 +2271,7 @@ async function runExternalRestartCase(
           owned: ['seed.txt', 'prompt.txt', 'request.json', 'fake-adapter.cjs'],
           excluded: [],
           risk: 'R1',
-          questionTimeoutMs: 300_000,
+          questionTimeoutMs: 600_000,
         }, null, 2)}\n`,
       );
       fs.writeFileSync(adapterFile, `
@@ -2714,6 +2732,18 @@ module.exports = {
         return true;
       },
     );
+    assert.throws(
+      () => validateRequest(externalRequest({
+        externalVisibleTerminal: { expectedClaudeVersion: '2.1.220' },
+      })),
+      (error) => {
+        assert.equal(error.reason, FAILURE.STATE_BINDING_MISMATCH);
+        assert.ok(
+          error.details.failures.includes('expectedClaudeVersionMustBeDiscovered'),
+        );
+        return true;
+      },
+    );
   });
 
   await checkExternal('external visible fixed SHA review separates and proves all four evidence layers', async () => {
@@ -3122,7 +3152,7 @@ module.exports = {
     assert.match(runtime.stats.reviewPrompts[0], /COREONE_REVIEW_REQUEST_/);
   });
 
-  await checkExternal('external startup refocuses the exact visible surface before review delivery', async () => {
+  await checkExternal('external startup never activates Terminal and fails closed before a background write', async () => {
     let runtime = null;
     const result = await runExternalCase({
       runtimeOptions: { loseFrontmostAfterHandshake: true },
@@ -3130,17 +3160,29 @@ module.exports = {
         runtime = value;
       },
     });
-    assert.equal(result.status, 'COMPLETE');
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE);
     assert.ok(runtime);
-    assert.equal(runtime.stats.reviewPromptWrites, 1);
-    assert.ok(runtime.stats.focusCalls >= 2);
+    assert.equal(runtime.stats.reviewPromptWrites, 0);
+    assert.equal(runtime.stats.focusCalls, 0);
   });
 
-  await checkExternal('external focus waits for macOS activation before a bound write', async () => {
+  await checkExternal('external passive transcript polling never activates Terminal', async () => {
+    let runtime = null;
     const result = await runExternalCase({
-      runtimeOptions: { focusActivationDelayInspections: 2 },
+      runtimeOptions: { completion: false },
+      captureRuntime(value) {
+        runtime = value;
+      },
     });
-    assert.equal(result.status, 'COMPLETE');
+    assert.equal(result.status, 'ACTIVE');
+    assert.ok(runtime);
+    assert.equal(runtime.stats.transcriptUpdateWaits.length, 2);
+    assert.deepEqual(
+      runtime.stats.transcriptUpdateWaits.map((item) => item.timeoutMs),
+      [600_000, 600_000],
+    );
+    assert.equal(runtime.stats.focusCalls, 0);
   });
 
   await checkExternal('external supervisor has no Claude termination path for slow work', async () => {
@@ -3177,7 +3219,7 @@ module.exports = {
     assert.ok(runtime);
     assert.equal(
       runtime.stats.transcriptTimeouts.filter(Number.isFinite)[0],
-      300_000,
+      600_000,
     );
   });
 
@@ -3222,6 +3264,24 @@ module.exports = {
     }
   });
 
+  await checkExternal('external launch binds the live queried Claude version without a request lock', async () => {
+    let runtime = null;
+    const result = await runExternalCase({
+      runtimeOptions: {
+        shellProbeVersion: '2.1.222 (Claude Code)',
+        claudeVersion: '2.1.222',
+      },
+      captureRuntime(value) {
+        runtime = value;
+      },
+    });
+    assert.equal(result.status, 'COMPLETE');
+    assert.equal(result.externalSession.claudeVersion, '2.1.222');
+    assert.ok(runtime);
+    assert.equal(runtime.stats.shellProbeCommands.length, 1);
+    assert.equal(runtime.stats.launchCommands.length, 1);
+  });
+
   await checkExternal('external startup acceptance recovers one launched session without duplicate prompt', async () => {
     const state = temporaryStateFile();
     const claim = makeExternalClaim();
@@ -3250,8 +3310,8 @@ module.exports = {
       assert.equal(runtime.stats.handshakePromptWrites, 1);
       assert.equal(runtime.stats.reviewPromptWrites, 1);
       assert.ok(
-        runtime.stats.transcriptTimeouts.includes(300_000),
-        'startup acceptance did not inherit the five-minute task budget',
+        runtime.stats.transcriptTimeouts.includes(600_000),
+        'startup acceptance did not inherit the ten-minute task budget',
       );
     } finally {
       state.cleanup();
@@ -3314,7 +3374,7 @@ module.exports = {
       assert.equal(runtime.stats.transcriptUpdateWaits.length, 2);
       assert.deepEqual(
         runtime.stats.transcriptUpdateWaits.map((item) => item.timeoutMs),
-        [300_000, 300_000],
+        [600_000, 600_000],
       );
     } finally {
       state.cleanup();
