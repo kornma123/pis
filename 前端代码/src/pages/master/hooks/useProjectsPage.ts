@@ -42,6 +42,7 @@ export function useProjectsPage() {
   const {
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -218,6 +219,7 @@ export function useProjectsPage() {
 
   return {
     boms, setBoms,
+    error,
     keyword, setKeyword,
     typeFilter, setTypeFilter,
     statusFilter, setStatusFilter,

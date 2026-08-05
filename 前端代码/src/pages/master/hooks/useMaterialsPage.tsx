@@ -36,7 +36,7 @@ export function useMaterialsPage() {
     : 20
 
   const {
-    data, loading, page, pageSize, total,
+    data, loading, error, page, pageSize, total,
     setPage, setPageSize, refresh,
   } = usePagination<Material>({
     fetchFn: async ({ page, pageSize }) => {
@@ -299,6 +299,7 @@ export function useMaterialsPage() {
 
   return {
     data, loading, page, pageSize, total, setPage, setPageSize, refresh,
+    error,
     keyword, setKeyword, categoryId, setCategoryId, supplierId, setSupplierId,
     quickFilter, setQuickFilter,
     categories, suppliers,

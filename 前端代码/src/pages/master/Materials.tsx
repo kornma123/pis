@@ -10,6 +10,11 @@ export default function Materials() {
 
   return (
     <div className="space-y-5">
+      {page.error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          加载失败：{page.error}
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -152,6 +152,60 @@ describe('materialApi 响应真值（Issue71）', () => {
     await expect(materialApi.getDetail('mat-1')).rejects.toThrow()
   })
 
+  it('detail：batches 按 live contract camelCase 读取，真实字段值保真（含合法 null）', async () => {
+    get.mockResolvedValue({
+      ...materialRow(),
+      batches: [
+        {
+          id: 'batch-1',
+          batchNo: 'B2026-0001',
+          quantity: 10,
+          productionDate: '2026-01-01',
+          expiryDate: '2027-01-01',
+          inboundId: 'inbound-1',
+        },
+        {
+          id: 'batch-2',
+          batchNo: null,
+          quantity: 0,
+          productionDate: null,
+          expiryDate: null,
+          inboundId: null,
+        },
+      ],
+      stockLogs: [],
+    } as never)
+    const res = await materialApi.getDetail('mat-1')
+    expect(res.batches[0]).toEqual({
+      id: 'batch-1',
+      batchNo: 'B2026-0001',
+      quantity: 10,
+      productionDate: '2026-01-01',
+      expiryDate: '2027-01-01',
+      inboundId: 'inbound-1',
+    })
+    expect(res.batches[1].batchNo).toBeNull()
+    expect(res.batches[1].quantity).toBe(0)
+  })
+
+  it('detail：batches 出现 snake_case 原始形状必须 fail-closed，不得静默读成 null', async () => {
+    get.mockResolvedValue({
+      ...materialRow(),
+      batches: [
+        {
+          id: 'batch-1',
+          batch_no: 'B2026-0001',
+          quantity: 10,
+          production_date: '2026-01-01',
+          expiry_date: '2027-01-01',
+          inbound_id: 'inbound-1',
+        },
+      ],
+      stockLogs: [],
+    } as never)
+    await expect(materialApi.getDetail('mat-1')).rejects.toThrow()
+  })
+
   it('getNextCode：未解包的错误 envelope 不冒充成功', async () => {
     get.mockResolvedValue({ data: { code: 'MAT-00042' } } as never)
     await expect(materialApi.getNextCode('cat-1')).rejects.toThrow()

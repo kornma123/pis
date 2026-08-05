@@ -35,3 +35,23 @@ test('admin can open the materials and projects master-data pages', async ({ pag
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: '检测服务', exact: true })).toBeVisible()
 })
+
+test('malformed BOM list response shows explicit error, not empty success', async ({ page }) => {
+  await loginThroughUi(page, 'admin')
+  await page.route('**/api/v1/boms*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          list: 'malformed',
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        },
+      }),
+    })
+  )
+  await page.goto('/bom')
+  await expect(page.getByText(/数据格式异常/).first()).toBeVisible()
+  await expect(page.getByText('暂无BOM数据', { exact: true })).toHaveCount(0)
+})

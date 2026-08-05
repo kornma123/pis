@@ -80,6 +80,9 @@ const bomDetail = {
   versionHistory: [
     { version: 'v1.0', updatedAt: '2026-01-01T00:00:00Z', changeLog: null },
   ],
+  // live contract：bom detail 不返回 createdAt/updatedAt，parser 输出 null，hook 用列表行真值补齐（F-2）
+  createdAt: null,
+  updatedAt: null,
 } as unknown as BomDetail
 
 beforeEach(() => {
@@ -100,7 +103,11 @@ describe('useBOMPage 消费者链路（Issue71）', () => {
     })
 
     expect(bomApi.getDetail).toHaveBeenCalledWith('bom-1')
-    expect(result.current.detailBom).toEqual(bomDetail)
+    expect(result.current.detailBom).toEqual({
+      ...bomDetail,
+      createdAt: bomListRow.createdAt,
+      updatedAt: bomListRow.updatedAt,
+    })
     expect(result.current.modalType).toBe('detail')
   })
 
@@ -114,6 +121,18 @@ describe('useBOMPage 消费者链路（Issue71）', () => {
 
     expect(result.current.detailBom).toBeNull()
     expect(result.current.modalType).toBeNull()
+  })
+
+  it('openDetail 合并列表行真值时间：detail 缺时间字段时不显示 "-"（F-2）', async () => {
+    vi.mocked(bomApi.getDetail).mockResolvedValue(bomDetail)
+    const { result } = renderHook(() => useBOMPage())
+
+    await act(async () => {
+      await result.current.openDetail(bomListRow)
+    })
+
+    expect(result.current.detailBom?.createdAt).toBe(bomListRow.createdAt)
+    expect(result.current.detailBom?.updatedAt).toBe(bomListRow.updatedAt)
   })
 
   it('handleCopy 用 detail 真值生成 create payload（未知不折 0、合法 0 保真）', async () => {

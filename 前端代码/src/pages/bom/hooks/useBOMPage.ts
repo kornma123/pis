@@ -205,7 +205,12 @@ export function useBOMPage() {
   const openDetail = async (row: BOM) => {
     try {
       const res: any = await bomApi.getDetail(row.id)
-      setDetailBom(res)
+      setDetailBom({
+        ...res,
+        // live contract：bom detail 不返回 createdAt/updatedAt；用同一记录列表行的真值时间补齐（F-2）
+        createdAt: res.createdAt ?? row.createdAt,
+        updatedAt: res.updatedAt ?? row.updatedAt,
+      })
       setDetailTab('info')
       setModalType('detail')
     } catch {

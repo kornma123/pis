@@ -243,6 +243,8 @@
         "前端代码/src/api/request.ts",
         "前端代码/src/pages/bom/**",
         "前端代码/src/pages/inventory/hooks/useInventoryPage.ts",
+        "前端代码/src/pages/master/Materials.tsx",
+        "前端代码/src/pages/master/Projects.tsx",
         "前端代码/src/pages/master/hooks/useMaterialsPage.tsx",
         "前端代码/src/pages/master/hooks/useProjectsPage.ts"
       ],

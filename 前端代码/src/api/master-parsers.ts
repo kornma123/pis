@@ -257,14 +257,24 @@ function parseMaterialListRow(endpoint: string, value: unknown): MaterialListRow
 
 function parseMaterialBatchRow(endpoint: string, value: unknown): MaterialBatchRow {
   if (!isRecord(value)) fail(endpoint)
+  // live contract：materials detail 的 batches 由路由显式映射为 camelCase
+  // （后端代码/server/src/routes/materials.ts:107-110）；出现 snake_case 原始形状必须 fail-closed，
+  // 不得静默把真实字段读成 null。
+  if (
+    value.batch_no !== undefined ||
+    value.production_date !== undefined ||
+    value.expiry_date !== undefined ||
+    value.inbound_id !== undefined
+  ) {
+    fail(endpoint)
+  }
   return {
     id: requiredString(endpoint, value.id),
-    // live contract：materials detail 的 batches 来自 `SELECT *`，字段为 snake_case
-    batchNo: nullableString(endpoint, value.batch_no),
+    batchNo: nullableString(endpoint, value.batchNo),
     quantity: requiredNonNegativeNumber(endpoint, value.quantity),
-    productionDate: nullableString(endpoint, value.production_date),
-    expiryDate: nullableString(endpoint, value.expiry_date),
-    inboundId: nullableString(endpoint, value.inbound_id),
+    productionDate: nullableString(endpoint, value.productionDate),
+    expiryDate: nullableString(endpoint, value.expiryDate),
+    inboundId: nullableString(endpoint, value.inboundId),
   }
 }
 
