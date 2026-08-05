@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
 
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+
 vi.mock('axios')
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
 
 describe('request', () => {
   let requestInterceptor: any
@@ -204,6 +207,18 @@ describe('request', () => {
       expect(out2).not.toContain('deadbeef1234567890')
     })
 
+    it('未加引号的 Digest 字段不得透传', () => {
+      const raw = 'Digest username=u, response=deadbeef1234567890'
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('deadbeef1234567890')
+    })
+
+    it('连续清洗同一个长 token 每次都必须 fail-closed', () => {
+      const raw = 'Q'.repeat(48)
+      expect(mod.sanitizeErrorMessage(raw)).toBe('')
+      expect(mod.sanitizeErrorMessage(raw)).toBe('')
+    })
+
     it('可识别 JSON 优先安全解析并递归清洗，普通字段保留', () => {
       const raw = JSON.stringify({
         data: { token: 'abc.def', password: 'x' },
@@ -215,6 +230,13 @@ describe('request', () => {
       expect(out).toContain('"message":"ok"')
       expect(out).not.toContain('abc.def')
       expect(out).not.toContain('"x"')
+    })
+
+    it('JSON 普通字段中的敏感句子也必须递归 fail-closed', () => {
+      const raw = JSON.stringify({ message: 'password is hunter2', details: { note: 'Bearer secret-value' } })
+      const out = mod.sanitizeErrorMessage(raw)
+      expect(out).not.toContain('hunter2')
+      expect(out).not.toContain('secret-value')
     })
 
     it('无敏感标记的普通文案原样保留', () => {
@@ -239,6 +261,55 @@ describe('request', () => {
       await expect(responseFulfilled(response)).rejects.toMatchObject({
         message: expect.not.stringContaining('dXNlcjpwYXNzd29yZA=='),
       })
+    })
+
+    it('Axios 最终拒绝不得回显 message 或携带请求凭据', async () => {
+      const secrets = [
+        'hunter2',
+        'header-secret',
+        'body-secret',
+        'param-secret',
+        'url-secret',
+        'request-secret',
+        'backend-secret',
+        'response-secret',
+      ]
+      const error = {
+        message: 'password is hunter2',
+        config: {
+          method: 'post',
+          url: '/inventory?token=url-secret',
+          headers: { Authorization: 'Bearer header-secret' },
+          data: JSON.stringify({ password: 'body-secret' }),
+          params: { apiKey: 'param-secret' },
+        },
+        request: { headers: { Authorization: 'Bearer request-secret' } },
+        response: {
+          status: 500,
+          headers: { 'set-cookie': 'token=response-header-secret' },
+          data: {
+            error: { message: 'password is backend-secret' },
+            debug: { token: 'response-secret' },
+          },
+        },
+      }
+
+      let rejected: typeof error | undefined
+      try {
+        await responseRejected(error)
+      } catch (caught) {
+        rejected = caught as typeof error
+      }
+
+      expect(rejected).toBeDefined()
+      expect(toastError).toHaveBeenCalledWith('请求失败，请稍后重试')
+      expect(rejected?.message).toBe('请求失败，请稍后重试')
+      expect(rejected?.config).toEqual({ method: 'post' })
+      expect(rejected?.request).toBeUndefined()
+      expect(rejected?.response.headers).toEqual({})
+      const serialized = JSON.stringify(rejected)
+      for (const secret of secrets) expect(serialized).not.toContain(secret)
+      expect(serialized).not.toContain('response-header-secret')
     })
   })
 })

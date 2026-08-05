@@ -18,6 +18,10 @@ function pagePayload(list: unknown[], total = list.length, page = 1, pageSize = 
   const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
   return {
     list,
+    page,
+    pageSize,
+    total,
+    totalPages,
     pagination: { page, pageSize, total, totalPages },
   }
 }
@@ -132,12 +136,50 @@ describe('materialApi 响应真值（Issue71）', () => {
     await expect(materialApi.getList({})).rejects.toThrow()
   })
 
+  it('fail-closed：live contract 的顶层分页与 pagination 不一致', async () => {
+    get.mockResolvedValue({
+      ...pagePayload([materialRow()], 1),
+      total: 999,
+      totalPages: 50,
+    } as never)
+    await expect(materialApi.getList({})).rejects.toThrow()
+  })
+
+  it('fail-closed：当前页行数不得超过 pageSize', async () => {
+    get.mockResolvedValue(pagePayload([materialRow(), materialRow({ id: 'mat-2' })], 2, 1, 1) as never)
+    await expect(materialApi.getList({})).rejects.toThrow()
+  })
+
   it('detail：合法空 batches/stockLogs 与可空字段保真', async () => {
     get.mockResolvedValue({ ...materialRow(), batches: [], stockLogs: [] } as never)
     const res = await materialApi.getDetail('mat-1')
     expect(res.batches).toEqual([])
     expect(res.stockLogs).toEqual([])
     expect(res.spec).toBe('100ml/瓶')
+  })
+
+  it('detail：stockLogs 的入库正数、出库负数与合法零增量保真', async () => {
+    get.mockResolvedValue({
+      ...materialRow(),
+      batches: [],
+      stockLogs: [
+        {
+          id: 'log-in', type: 'inbound', quantity: 2, beforeStock: 0, afterStock: 2,
+          relatedId: 'in-1', operator: 'admin', createdAt: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 'log-out', type: 'outbound', quantity: -1, beforeStock: 2, afterStock: 1,
+          relatedId: 'out-1', operator: 'admin', createdAt: '2026-01-02T00:00:00Z',
+        },
+        {
+          id: 'log-zero', type: 'adjustment', quantity: 0, beforeStock: 1, afterStock: 1,
+          relatedId: null, operator: null, createdAt: '2026-01-03T00:00:00Z',
+        },
+      ],
+    } as never)
+
+    const res = await materialApi.getDetail('mat-1')
+    expect(res.stockLogs.map((row) => row.quantity)).toEqual([2, -1, 0])
   })
 
   it('detail：fail-closed（batches 非数组 / stockLogs 行缺 id）', async () => {
@@ -166,11 +208,11 @@ describe('materialApi 响应真值（Issue71）', () => {
         },
         {
           id: 'batch-2',
-          batchNo: null,
+          batchNo: 'B2026-0002',
           quantity: 0,
           productionDate: null,
           expiryDate: null,
-          inboundId: null,
+          inboundId: 'inbound-2',
         },
       ],
       stockLogs: [],
@@ -184,8 +226,22 @@ describe('materialApi 响应真值（Issue71）', () => {
       expiryDate: '2027-01-01',
       inboundId: 'inbound-1',
     })
-    expect(res.batches[1].batchNo).toBeNull()
+    expect(res.batches[1].batchNo).toBe('B2026-0002')
     expect(res.batches[1].quantity).toBe(0)
+  })
+
+  it.each([
+    ['batchNo 缺失', { id: 'batch-1', quantity: 1, inboundId: 'inbound-1' }],
+    ['batchNo 为 null', { id: 'batch-1', batchNo: null, quantity: 1, inboundId: 'inbound-1' }],
+    ['inboundId 缺失', { id: 'batch-1', batchNo: 'B2026-0001', quantity: 1 }],
+    ['inboundId 为 null', { id: 'batch-1', batchNo: 'B2026-0001', quantity: 1, inboundId: null }],
+  ])('detail：batches 的必填身份 fail-closed（%s）', async (_label, batch) => {
+    get.mockResolvedValue({
+      ...materialRow(),
+      batches: [batch],
+      stockLogs: [],
+    } as never)
+    await expect(materialApi.getDetail('mat-1')).rejects.toThrow()
   })
 
   it('detail：batches 出现 snake_case 原始形状必须 fail-closed，不得静默读成 null', async () => {
@@ -254,6 +310,14 @@ describe('projectApi 响应真值（Issue71）', () => {
     get.mockResolvedValue({
       ...projectRow(),
       costStats: { totalCost: null, sampleCount: 0, unitCost: 0 },
+    } as never)
+    await expect(projectApi.getDetail('proj-1')).rejects.toThrow()
+  })
+
+  it('detail：sampleCount 必须是非负整数', async () => {
+    get.mockResolvedValue({
+      ...projectRow(),
+      costStats: { totalCost: 1, sampleCount: 1.5, unitCost: 1 },
     } as never)
     await expect(projectApi.getDetail('proj-1')).rejects.toThrow()
   })

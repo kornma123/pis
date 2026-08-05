@@ -45,11 +45,11 @@ export interface MaterialListRow {
 
 export interface MaterialBatchRow {
   id: string
-  batchNo: string | null
+  batchNo: string
   quantity: number
   productionDate: string | null
   expiryDate: string | null
-  inboundId: string | null
+  inboundId: string
 }
 
 export interface MaterialStockLogRow {
@@ -182,6 +182,11 @@ function requiredNonNegativeNumber(endpoint: string, value: unknown): number {
   return value
 }
 
+function requiredFiniteNumber(endpoint: string, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) fail(endpoint)
+  return value
+}
+
 function nullableNonNegativeNumber(endpoint: string, value: unknown): number | null {
   if (value === undefined || value === null) return null
   return requiredNonNegativeNumber(endpoint, value)
@@ -222,9 +227,24 @@ function parseListPage<T>(
   const { list, pagination } = payload
   if (!Array.isArray(list)) fail(endpoint)
   const rows = list.map((row) => parseRow(endpoint, row))
-  const page = parsePagination(endpoint, pagination)
-  if (page.total < rows.length) fail(endpoint)
-  return { list: rows, pagination: page }
+  const topLevelPage = parsePagination(endpoint, payload)
+  const nestedPage = parsePagination(endpoint, pagination)
+  if (
+    topLevelPage.page !== nestedPage.page ||
+    topLevelPage.pageSize !== nestedPage.pageSize ||
+    topLevelPage.total !== nestedPage.total ||
+    topLevelPage.totalPages !== nestedPage.totalPages
+  ) {
+    fail(endpoint)
+  }
+  if (rows.length > nestedPage.pageSize || nestedPage.total < rows.length) fail(endpoint)
+  if (rows.length > 0) {
+    const firstRowOffset = (nestedPage.page - 1) * nestedPage.pageSize
+    if (firstRowOffset >= nestedPage.total || firstRowOffset + rows.length > nestedPage.total) {
+      fail(endpoint)
+    }
+  }
+  return { list: rows, pagination: nestedPage }
 }
 
 function parseMaterialListRow(endpoint: string, value: unknown): MaterialListRow {
@@ -270,11 +290,11 @@ function parseMaterialBatchRow(endpoint: string, value: unknown): MaterialBatchR
   }
   return {
     id: requiredString(endpoint, value.id),
-    batchNo: nullableString(endpoint, value.batchNo),
+    batchNo: requiredString(endpoint, value.batchNo),
     quantity: requiredNonNegativeNumber(endpoint, value.quantity),
     productionDate: nullableString(endpoint, value.productionDate),
     expiryDate: nullableString(endpoint, value.expiryDate),
-    inboundId: nullableString(endpoint, value.inboundId),
+    inboundId: requiredString(endpoint, value.inboundId),
   }
 }
 
@@ -283,7 +303,8 @@ function parseMaterialStockLogRow(endpoint: string, value: unknown): MaterialSto
   return {
     id: requiredString(endpoint, value.id),
     type: requiredString(endpoint, value.type),
-    quantity: requiredNonNegativeNumber(endpoint, value.quantity),
+    // stock_logs.quantity 是带符号库存增量：入库为正，出库/报损为负，零增量也合法。
+    quantity: requiredFiniteNumber(endpoint, value.quantity),
     beforeStock: requiredNonNegativeNumber(endpoint, value.beforeStock),
     afterStock: requiredNonNegativeNumber(endpoint, value.afterStock),
     relatedId: nullableString(endpoint, value.relatedId),
@@ -391,7 +412,7 @@ export function parseProjectDetailResponse(payload: unknown): ProjectDetail {
     ...base,
     costStats: {
       totalCost: requiredNonNegativeNumber('projectDetail', payload.costStats.totalCost),
-      sampleCount: requiredNonNegativeNumber('projectDetail', payload.costStats.sampleCount),
+      sampleCount: requiredNonNegativeInteger('projectDetail', payload.costStats.sampleCount),
       unitCost: requiredNonNegativeNumber('projectDetail', payload.costStats.unitCost),
     },
   }
