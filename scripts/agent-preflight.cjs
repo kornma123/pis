@@ -20,7 +20,7 @@ const CONTRACT_PATH = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION_PATH = 'docs/claude-code-cli-supervision.md'
 const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v3'
-const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=600 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=within-next-poll session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_CLI_SUPERVISOR_PATH = 'scripts/claude-cli-supervisor.cjs'
 const CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH = 'scripts/claude-cli-supervisor.selftest.cjs'
@@ -53,8 +53,8 @@ const CLAUDE_CLI_SUPERVISOR_TEST_HARNESS_EXPORTS = Object.freeze([
   'answerSupervisorWithTestAdapter',
   'ackStopSupervisorWithTestAdapter',
 ])
-const CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT = 42
-const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = '516d59e66e9bb5f18196f3b01b71dd4d723c77e30fb27878ad5b422623889799'
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT = 43
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = 'd384c0d366143790b33a22ed641ec1de3099ba466ec83d9e9f6eb0563d450bde'
 const CLAUDE_COREONE_SKILL_PATH = '.claude/skills/coreone/SKILL.md'
 const PM_DECISIONS_PATH = 'docs/PM待拍板.md'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
@@ -416,7 +416,7 @@ function inspectClaudeSupervisorAssets(root, source, contents) {
     owned: ['scripts/**'],
     excluded: ['前端代码/**', '后端代码/**'],
     risk: 'R1',
-    questionTimeoutMs: 1000
+    questionTimeoutMs: 600000
   }, null, { stateFile, maxCycles: 1 });
   if (result.status !== 'BLOCKED' || result.reason !== 'TERMINAL_VISIBILITY_UNPROVEN') {
     throw new Error('real no-adapter negative probe did not fail closed: ' + JSON.stringify(result));
