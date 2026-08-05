@@ -20,7 +20,7 @@ const { matchesAny } = require('./agent-preflight.cjs');
 
 const ADAPTER_API_VERSION = 2;
 const DEFAULT_EFFORT = 'ultracode';
-const DEFAULT_POLL_MS = 300_000;
+const DEFAULT_POLL_MS = 600_000;
 const MAX_VISIBLE_WAIT_MS = 10 * 60 * 1000;
 const REQUIRED_STABLE_EOF_READS = 2;
 const STATE_SCHEMA_VERSION = 3;
@@ -309,7 +309,6 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
     claudePid,
     claudeSessionId: String(input.claudeSessionId || '').trim(),
     transcriptPath,
-    expectedClaudeVersion: String(input.expectedClaudeVersion || '').trim(),
     expectedEffort: String(input.expectedEffort || '').trim(),
     expectedPermissionMode: String(input.expectedPermissionMode || '').trim(),
     repositoryFullName: String(input.repositoryFullName || '').trim(),
@@ -333,7 +332,9 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     normalized.claudeSessionId,
   )) failures.push('claudeSessionId');
-  if (!parseVersion(normalized.expectedClaudeVersion)) failures.push('expectedClaudeVersion');
+  if (input.expectedClaudeVersion !== undefined) {
+    failures.push('expectedClaudeVersionMustBeDiscovered');
+  }
   if (!EXTERNAL_VISIBLE_EFFORTS.has(normalized.expectedEffort)) failures.push('expectedEffort');
   if (normalized.expectedPermissionMode !== 'bypassPermissions') failures.push('expectedPermissionMode');
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized.repositoryFullName)) {
@@ -458,10 +459,13 @@ function validateRequest(input) {
       'risk must be R0, R1, R2, or R3',
     );
   }
-  if (!Number.isFinite(request.questionTimeoutMs) || request.questionTimeoutMs < 1) {
+  if (
+    !Number.isFinite(request.questionTimeoutMs) ||
+    request.questionTimeoutMs < DEFAULT_POLL_MS
+  ) {
     throw new SupervisorFailure(
       FAILURE.STATE_BINDING_MISMATCH,
-      'questionTimeoutMs must be a positive finite number',
+      `questionTimeoutMs must be at least ${DEFAULT_POLL_MS} milliseconds`,
     );
   }
   if (!Object.values(SUPERVISION_MODE).includes(supervisionMode)) {
@@ -3709,30 +3713,32 @@ function defaultExternalVisibleRuntime() {
       }, { timeoutMs, message: 'Claude transcript evidence did not appear before the deadline' });
     },
     async waitForTranscriptUpdate(sessionId, transcriptPath, cursor, timeoutMs) {
-      const maximum = Math.min(Number(timeoutMs || DEFAULT_POLL_MS), MAX_VISIBLE_WAIT_MS);
-      const started = Date.now();
+      const requested = Number(timeoutMs || DEFAULT_POLL_MS);
+      if (!Number.isFinite(requested) || requested < DEFAULT_POLL_MS) {
+        throw new SupervisorFailure(
+          FAILURE.STATE_BINDING_MISMATCH,
+          `external transcript polling must wait at least ${DEFAULT_POLL_MS} milliseconds`,
+        );
+      }
+      const maximum = Math.min(requested, MAX_VISIBLE_WAIT_MS);
+      await delay(maximum);
       let latest = null;
-      while (Date.now() - started <= maximum) {
-        try {
-          latest = readClaudeTranscript(sessionId, transcriptPath);
-        } catch (error) {
-          if (
-            error.reason !== FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
-            error.code !== 'ENOENT'
-          ) throw error;
+      try {
+        latest = readClaudeTranscript(sessionId, transcriptPath);
+      } catch (error) {
+        if (
+          error.reason !== FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
+          error.code !== 'ENOENT'
+        ) throw error;
+      }
+      if (latest) {
+        const tail = latestAssistantText(latest);
+        if (
+          latest.recordCount > Number(cursor || 0) ||
+          /COREONE_REVIEW_(?:COMPLETE|QUESTION)\b/.test(tail)
+        ) {
+          return { snapshot: latest, changed: true };
         }
-        if (latest) {
-          const tail = latestAssistantText(latest);
-          if (
-            latest.recordCount > Number(cursor || 0) ||
-            /COREONE_REVIEW_(?:COMPLETE|QUESTION)\b/.test(tail)
-          ) {
-            return { snapshot: latest, changed: true };
-          }
-        }
-        const remaining = maximum - (Date.now() - started);
-        if (remaining <= 0) break;
-        await delay(Math.min(250, remaining));
       }
       if (latest) return { snapshot: latest, changed: false };
       throw new SupervisorFailure(
@@ -3748,8 +3754,12 @@ function assertExternalSurface(binding, inspected, options = {}) {
   if (inspected?.terminalApp !== binding.terminalApp) failures.push('terminalApp');
   if (Number(inspected?.windowId) !== binding.windowId) failures.push('windowId');
   if (inspected?.tty !== binding.tty) failures.push('tty');
-  if (inspected?.frontmost !== true) failures.push('frontmost');
-  if (inspected?.frontWindow !== true) failures.push('frontWindow');
+  if (options.requireForeground && inspected?.frontmost !== true) {
+    failures.push('frontmost');
+  }
+  if (options.requireForeground && inspected?.frontWindow !== true) {
+    failures.push('frontWindow');
+  }
   if (inspected?.selected !== true) failures.push('selectedTab');
   if (options.initial && inspected?.windowTitle !== binding.windowTitle) {
     failures.push('windowTitle');
@@ -4046,6 +4056,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
   let transcriptPath = binding.transcriptPath;
   let claudePid = binding.claudePid;
   let claudeLaunchPath = null;
+  let claudeLaunchVersion = null;
   let lastVisibilityCanary = null;
   let lastVisibilityResponse = null;
 
@@ -4059,33 +4070,13 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
   }
 
   async function inspectBoundSurface(options = {}) {
-    if (typeof runtime.focusTerminal === 'function') {
-      await runtime.focusTerminal(binding);
-    }
-    const activationDeadline = Date.now() + 3_000;
-    while (true) {
-      const inspected = await runtime.inspectTerminal(binding);
-      try {
-        assertExternalSurface(binding, inspected, options);
-        return inspected;
-      } catch (error) {
-        const failures = Array.isArray(error.details?.failures)
-          ? error.details.failures
-          : [];
-        const activationPending =
-          error.reason === FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
-          failures.length > 0 &&
-          failures.every((failure) =>
-            ['frontmost', 'frontWindow'].includes(failure),
-          );
-        if (!activationPending || Date.now() >= activationDeadline) throw error;
-        await delay(100);
-      }
-    }
+    const inspected = await runtime.inspectTerminal(binding);
+    assertExternalSurface(binding, inspected, options);
+    return inspected;
   }
 
   async function writeBoundTerminal(input, purpose) {
-    await inspectBoundSurface();
+    await inspectBoundSurface({ requireForeground: true });
     const receipt = await runtime.writeTerminal(binding, input, purpose);
     if (receipt?.accepted !== true) {
       throw new SupervisorFailure(
@@ -4108,9 +4099,14 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     );
     transcriptPath = snapshot.transcriptPath;
     const metadata = snapshot.metadata;
+    const versionComparison = compareVersions(
+      metadata.claudeVersion,
+      request.minimumClaudeVersion,
+    );
     if (
       metadata.cwd !== request.cwd ||
-      metadata.claudeVersion !== binding.expectedClaudeVersion ||
+      versionComparison === null ||
+      versionComparison < 0 ||
       metadata.effort !== binding.expectedEffort ||
       metadata.permissionMode !== binding.expectedPermissionMode
     ) {
@@ -4403,17 +4399,11 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         const normalizedVisibleVersion = parseVersion(
           shellProbe?.claudeVersion,
         )?.raw || null;
-        const versionMatches =
-          normalizedVisibleVersion !== null &&
-          compareVersions(
-            normalizedVisibleVersion,
-            binding.expectedClaudeVersion,
-          ) === 0;
         if (
           canonicalPath(shellProbe?.cwd || '') !== request.cwd ||
           canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd ||
           !path.isAbsolute(String(shellProbe?.claudePath || '')) ||
-          !versionMatches ||
+          normalizedVisibleVersion === null ||
           shellProbe?.effortSupported !== true
         ) {
           const cwdMismatch =
@@ -4422,7 +4412,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           throw new SupervisorFailure(
             cwdMismatch
               ? FAILURE.CWD_MISMATCH
-              : !versionMatches
+              : normalizedVisibleVersion === null
                 ? FAILURE.CLAUDE_CLI_VERSION_MISMATCH
                 : FAILURE.CLAUDE_EFFORT_UNSUPPORTED,
             'same-tab shell probe did not prove cwd, Claude version, and effort support',
@@ -4436,6 +4426,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           );
         }
         claudeLaunchPath = canonicalPath(shellProbe.claudePath);
+        claudeLaunchVersion = normalizedVisibleVersion;
         return boundResult(input, {
           cwd: request.cwd,
           worktreeRoot: request.cwd,
@@ -4458,6 +4449,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         });
       }
       const { processInfo, snapshot } = await inspectBoundClaude();
+      claudeLaunchVersion = parseVersion(snapshot.metadata.claudeVersion)?.raw || null;
       return boundResult(input, {
         cwd: snapshot.metadata.cwd,
         worktreeRoot: snapshot.metadata.cwd,
@@ -4601,7 +4593,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         snapshot.metadata.cwd !== request.cwd ||
         snapshot.metadata.effort !== binding.expectedEffort ||
         snapshot.metadata.permissionMode !== 'bypassPermissions' ||
-        snapshot.metadata.claudeVersion !== binding.expectedClaudeVersion
+        snapshot.metadata.claudeVersion !== claudeLaunchVersion
       ) {
         throw new SupervisorFailure(
           FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
