@@ -8,6 +8,10 @@ let seq = 0
 function seedMaterial(stock: number): string {
   const id = `MAT-TP-${++seq}`
   db.prepare(`
+    INSERT OR IGNORE INTO locations (id, code, name, type, zone, status)
+    VALUES ('LOC-STOCKTAKING', 'LOC-STOCKTAKING', 'stocktaking', 'shelf', 'A', 1)
+  `).run()
+  db.prepare(`
     INSERT INTO materials (id, code, name, unit, category_id, price, status, is_deleted)
     VALUES (?, ?, ?, 'pcs', 'CAT', 10, 1, 0)
   `).run(id, id, id)
@@ -17,6 +21,12 @@ function seedMaterial(stock: number): string {
     INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, status)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(`B-${id}`, id, `B-${id}`, stock, stock, `IN-${id}`, stock > 0 ? 1 : 0)
+  if (stock > 0) {
+    db.prepare(`
+      INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+      VALUES (?, ?, ?, 'LOC-STOCKTAKING', ?)
+    `).run(`P-${id}`, id, `B-${id}`, stock)
+  }
   return id
 }
 

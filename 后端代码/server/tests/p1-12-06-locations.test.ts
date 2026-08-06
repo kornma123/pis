@@ -6,10 +6,7 @@
  *   修复：写守卫放开给 requireRole('admin','warehouse_manager')。
  *   红测试：wm token POST 库位 → 201（修复前 403）。
  *
- * P1-06 Bug: GET 返回 r.used，但全库无任何写 used 的逻辑 → used 恒为装饰性的 0。
- *   master 数据模型实情：库位级库存由 inventory.location_id 关联（无 inventory_locations 表）。
- *   修复：used 改由 SELECT COALESCE(SUM(stock),0) FROM inventory WHERE location_id=? 派生。
- *   红测试：建库位 + 该库位下有库存 → GET used>0（修复前恒 0）。
+ * P1-06 合同：used 由 inventory_positions 和物料包装换算派生标准格位。
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import bcrypt from 'bcryptjs'
@@ -79,7 +76,7 @@ describe('P1-12 库位写权限：仓管可建库位', () => {
   })
 })
 
-describe('P1-06 库位利用率派生：used 来自该库位下库存合计', () => {
+describe('P1-06 库位利用率派生：used 来自 position 的标准格位', () => {
   it('建库位 + 入该库位库存 → GET used>0（修复前恒 0）', async () => {
     const request = (await import('supertest')).default
     // 建库位（admin）
@@ -89,11 +86,14 @@ describe('P1-06 库位利用率派生：used 来自该库位下库存合计', ()
       .send({ name: '有库存库位', zone: 'B区', capacity: 100 })
     const locId = created.body.data.id
 
-    // 该库位下放置库存（inventory.location_id 关联）
-    db.prepare(`INSERT INTO materials (id, code, name, unit, category_id, status, is_deleted)
-      VALUES ('MAT-LOC06', 'C-LOC06', '库位试剂', '瓶', 'CAT', 1, 0)`).run()
+    // 37 个库存单位，每包装 10 个且每包装占 1 格，向上取整为 4 格。
+    db.prepare(`INSERT INTO materials
+      (id, code, name, unit, category_id, batch_managed, units_per_package, slots_per_package, status, is_deleted)
+      VALUES ('MAT-LOC06', 'C-LOC06', '库位试剂', '瓶', 'CAT', 0, 10, 1, 1, 0)`).run()
     db.prepare(`INSERT INTO inventory (id, material_id, stock, location_id)
-      VALUES ('INV-LOC06', 'MAT-LOC06', 37, ?)`).run(locId)
+      VALUES ('INV-LOC06', 'MAT-LOC06', 37, NULL)`).run()
+    db.prepare(`INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+      VALUES ('POS-LOC06', 'MAT-LOC06', NULL, ?, 37)`).run(locId)
 
     const list = await request(app)
       .get('/api/v1/locations?pageSize=100')
@@ -101,8 +101,7 @@ describe('P1-06 库位利用率派生：used 来自该库位下库存合计', ()
     expect(list.status).toBe(200)
     const loc = list.body.data.list.find((l: any) => l.id === locId)
     expect(loc).toBeTruthy()
-    // 修复前 used 恒为 0；修复后应等于库位下库存合计 37
-    expect(loc.used).toBe(37)
+    expect(loc.used).toBe(4)
   })
 
   it('无库存库位 used = 0', async () => {

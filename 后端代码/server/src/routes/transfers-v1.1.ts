@@ -3,7 +3,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import {
+  applyInventoryPlan,
+  inventoryErrorResponse,
+  planInventoryTransfers,
+  replaceAllocationFacts,
+} from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -80,17 +86,13 @@ router.get('/stats', (_req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-// 新增调拨（库位间移动、总库存不变：仅记录 + 改 location_id，不动 stock）
+// 新增调拨：position 减加同事务守恒，派生 cache 不变。
 router.post('/inbound', requireTransfersWrite, (req, res) => {
   try {
-    const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
+    const { materialId, quantity, fromLocationId, toLocationId, operator, remark } = req.body
     const qty = parseFinitePositiveNumber(quantity)
-    if (!materialId || !toLocationId || qty === null) {
-      error(res, '物料、目标库位和数量必填', 'INVALID_PARAMETER', 400)
-      return
-    }
-    if (!fromLocationId && !fromLocationName) {
-      error(res, '来源库位或来源库位名称必填', 'INVALID_PARAMETER', 400)
+    if (!materialId || !fromLocationId || !toLocationId || qty === null) {
+      error(res, '物料、来源库位、目标库位和数量必填', 'INVALID_PARAMETER', 400)
       return
     }
     const db = getDatabase()
@@ -99,51 +101,52 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
     const location = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(toLocationId) as any
     if (!location) { error(res, '目标库位不存在或已删除', 'NOT_FOUND', 404); return }
-    // 来源以 id 形式给出则校验存在 + 禁止同库位自调；保留 fromLocationName 兜底（外部/自由来源，其撤销无法还原库位）
-    if (fromLocationId) {
-      const fromLoc = db.prepare('SELECT id FROM locations WHERE id = ? AND is_deleted = 0').get(fromLocationId) as any
-      if (!fromLoc) { error(res, '来源库位不存在或已删除', 'NOT_FOUND', 404); return }
-      if (fromLocationId === toLocationId) { error(res, '来源库位和目标库位不能相同', 'INVALID_PARAMETER', 400); return }
-    }
-    // 调拨＝移动既有库存：物料必须已在库（无库存行不能凭空"移动"，首次入库请走入库）
-    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    if (!inv) { error(res, '该物料暂无库存，无法调拨（如需入库请使用入库）', 'STOCK_INSUFFICIENT', 422); return }
-
     db.exec('BEGIN IMMEDIATE')
     try {
-      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      if (!lockedInv) {
-        db.exec('ROLLBACK')
-        error(res, '该物料暂无库存，无法调拨（如需入库请使用入库）', 'STOCK_INSUFFICIENT', 422); return
-      }
-      const lockedStock = parseFiniteNumber(lockedInv.stock)
-      if (lockedStock === null) {
-        db.exec('ROLLBACK')
-        error(res, '库存超出支持的数值范围', 'INVALID_PARAMETER', 400); return
-      }
       const inboundNo = `TF-${Date.now()}`
       const id = uuidv4()
+      const plan = planInventoryTransfers(db, [{
+        materialId,
+        quantity: qty,
+        fromLocationId,
+        toLocationId,
+        ownerLineId: id,
+      }])
       db.prepare(`
-        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, location_id, from_location_id, operator, status, remark)
-        VALUES (?, ?, 'transfer', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
-      `).run(id, inboundNo, materialId, batchNo || null, qty, material.unit || '个', toLocationId, fromLocationId || null, operator || 'system', remark || '')
+        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, location_id, from_location_id, operator, status, remark)
+        VALUES (?, ?, 'transfer', ?, NULL, NULL, ?, ?, ?, ?, ?, 'completed', ?)
+      `).run(id, inboundNo, materialId, qty, material.unit || '个', toLocationId, fromLocationId, operator || 'system', remark || '')
 
-      // 库位间移动：总库存不变，只把物料当前库位指到目标（单库位模型：整物料 last-move-wins）
-      db.prepare("UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?").run(toLocationId, materialId)
+      applyInventoryPlan(db, plan)
+      replaceAllocationFacts(db, {
+        operationKind: 'transfer', ownerId: id, direction: 'out', allocations: plan.allocations,
+      })
 
       // stock_logs：调拨对库存 0 变动（before==after，quantity=0），仅留移库痕
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'transfer', ?, 0, ?, ?, ?, 'transfer', ?, ?)
-      `).run(uuidv4(), materialId, lockedStock, lockedStock, id, operator || 'system', `库位调拨 ${qty}（总量不变）`)
+      `).run(
+        uuidv4(), materialId,
+        plan.allocations[0]?.inventoryBefore ?? qty,
+        plan.allocations[0]?.inventoryAfter ?? qty,
+        id, operator || 'system', `库位调拨 ${qty}（总量不变）`,
+      )
 
       db.exec('COMMIT')
-      success(res, { id, inboundNo, materialId, quantity: qty, fromLocationId, fromLocationName, toLocationId }, 'Transfer created')
+      success(res, {
+        id, inboundNo, materialId, quantity: qty, fromLocationId, toLocationId,
+        warnings: plan.capacityWarnings ?? [],
+      }, 'Transfer created')
     } catch (e: any) {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const failure = inventoryErrorResponse(err)
+    if (failure) { error(res, failure.message, failure.code, failure.status); return }
+    error(res, err.message)
+  }
 })
 
 // 撤销调拨（还原库位到来源；总库存仍不变。来源未知的历史记录保持现状、不乱写）
@@ -153,6 +156,8 @@ router.delete('/:id', requireTransfersWrite, (req, res) => {
     const db = getDatabase()
     const record = db.prepare("SELECT * FROM inbound_records WHERE id = ? AND type = 'transfer' AND is_deleted = 0").get(id) as any
     if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+    return
 
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -160,10 +165,6 @@ router.delete('/:id', requireTransfersWrite, (req, res) => {
 
       const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
       const beforeStock = inv?.stock ?? 0
-      if (record.from_location_id) {
-        db.prepare('UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(record.from_location_id, record.material_id)
-      }
-
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, 0, ?, ?, ?, 'transfer_cancel', ?, '撤销调拨（还原库位·总量不变）')

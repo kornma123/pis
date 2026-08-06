@@ -35,15 +35,19 @@ beforeAll(async () => {
   // 物料：进价（批次 inbound_price）= 10/瓶
   db.prepare(`INSERT INTO materials (id, code, name, unit, category_id, price, status, is_deleted)
     VALUES ('MAT-SR13', 'C-SR13', '退货试剂', '瓶', 'CAT', 10, 1, 0)`).run()
+  db.prepare(`INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES ('LOC-SR13', 'LOC-SR13', '退货库位13', 'shelf', 'A', 1)`).run()
   db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES ('INV-SR13', 'MAT-SR13', 50)`).run()
   db.prepare(`INSERT INTO inbound_records
     (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount, location_id, operator, status)
     VALUES ('IN-SR13', 'IN-SR13', 'purchase', 'MAT-SR13', 'B-SR13', 'BN-SR13', 50, '瓶', 10, 500, 'LOC-SR13', 'test', 'completed')`).run()
   db.prepare(`INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, status)
     VALUES ('B-SR13', 'MAT-SR13', 'BN-SR13', 50, 50, 'IN-SR13', 10, 1)`).run()
+  db.prepare(`INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+    VALUES ('POS-SR13', 'MAT-SR13', 'B-SR13', 'LOC-SR13', 50)`).run()
   db.prepare(`INSERT INTO inventory_transaction_allocations
-    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, direction, quantity)
-    VALUES ('ALLOC-IN-SR13', 'inbound', 'IN-SR13', 'IN-SR13', 'MAT-SR13', 'B-SR13', 'in', 50)`).run()
+    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity)
+    VALUES ('ALLOC-IN-SR13', 'inbound', 'IN-SR13', 'IN-SR13', 'MAT-SR13', 'B-SR13', 'LOC-SR13', 'in', 50)`).run()
 })
 
 describe('P1-13 退款上界勾稽', () => {

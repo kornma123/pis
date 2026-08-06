@@ -2,9 +2,9 @@
  * Lane C「修流程」— 退库/报废/调拨 后端契约（TDD 先行，语义改正后锁定）
  *
  * 讨论循环（2026-07-02，PM 拍板）确认的库存语义：
- *  - 退库(returns)：物料退回仓库 → 库存 +数量；撤销对称 −数量（带负库存拦截）。无上限、无库存行则新建。
- *  - 调拨(transfers)：库位间移动、总库存不变 → 只改 inventory.location_id、不动 stock；持久化 from_location_id；撤销还原库位。
- *  - 报废(scraps)：物料退出库存 → 库存 −数量（本就正确，此处回归锁定）。
+ *  - 退库(returns)：优先回原 allocation 库位；取消进入 G2 补偿链。
+ *  - 调拨(transfers)：position 真正部分移动、总库存守恒；取消进入 G2 补偿链。
+ *  - 报废(scraps)：自动 FEFO 扣减；取消进入 G2 补偿链。
  * 另：三个列表加 sortField/sortOrder 白名单 + 关键字/原因/目标库位/日期过滤 + /stats。
  *
  * 守 ABC 黄金零回归：这三条与 ¥13,152/¥27,870 物理无关（成本走出库+BOM、收入走账单+LIS）。
@@ -43,6 +43,14 @@ function seed(db: any) {
 const inv = (db: any, materialId: string) =>
   db.prepare('SELECT stock, location_id FROM inventory WHERE material_id = ?').get(materialId) as any
 
+const positions = (db: any, materialId: string) =>
+  db.prepare(`
+    SELECT location_id, quantity
+    FROM inventory_positions
+    WHERE material_id = ?
+    ORDER BY location_id
+  `).all(materialId) as Array<{ location_id: string; quantity: number }>
+
 async function inbound(app: any, token: string, f: any, qty: number) {
   const res = await request(app).post('/api/v1/inbound').set('Authorization', `Bearer ${token}`).send({
     type: 'direct', materialId: f.materialId, batchNo: `B-${f.sfx}`, quantity: qty, price: 10,
@@ -80,7 +88,7 @@ describe('Lane C · 退库(returns) 语义：物料退回仓库 → 库存 +数�
     expect(inv(db, f.materialId).stock).toBe(95)
   })
 
-  it('RET-02 撤销退库对称扣回（105 − 5 = 100）', async () => {
+  it('RET-02 取消退库进入 G2 补偿链，不覆盖既有事实', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
     const sourceAllocationId = await returnSource(app, token, f, 10)
     const c = await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
@@ -88,8 +96,9 @@ describe('Lane C · 退库(returns) 语义：物料退回仓库 → 库存 +数�
     const id = c.body.data.id
     expect(inv(db, f.materialId).stock).toBe(95)
     const d = await request(app).delete(`/api/v1/returns/${id}`).set('Authorization', `Bearer ${token}`)
-    expect(d.status).toBe(200)
-    expect(inv(db, f.materialId).stock).toBe(90)
+    expect(d.status).toBe(409)
+    expect(d.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect(inv(db, f.materialId).stock).toBe(95)
   })
 
   it('RET-03 无上限：可退超过当前库存（不再因库存不足被拒）', async () => {
@@ -127,15 +136,16 @@ describe('Lane C · 报废(scraps) 语义：退出库存 → 库存 −数量（
   let app: any, db: any, token: string
   beforeAll(async () => { ({ app, db } = await getApp()); token = await loginAdmin(app) })
 
-  it('SCR-01 报废使库存减少（100 − 3 = 97），撤销回滚（+3）', async () => {
+  it('SCR-01 报废使库存减少，取消进入 G2 补偿链', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
     const c = await request(app).post('/api/v1/scraps').set('Authorization', `Bearer ${token}`)
       .send({ materialId: f.materialId, quantity: 3, reason: 'expired' })
     expect([200, 201]).toContain(c.status)
     expect(inv(db, f.materialId).stock).toBe(97)
     const d = await request(app).delete(`/api/v1/scraps/${c.body.data.id}`).set('Authorization', `Bearer ${token}`)
-    expect(d.status).toBe(200)
-    expect(inv(db, f.materialId).stock).toBe(100)
+    expect(d.status).toBe(409)
+    expect(d.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect(inv(db, f.materialId).stock).toBe(97)
   })
 
   it('SCR-02 库存不足报废被拒（422）', async () => {
@@ -151,13 +161,18 @@ describe('Lane C · 调拨(transfers) 语义：库位间移动、总库存不变
   let app: any, db: any, token: string
   beforeAll(async () => { ({ app, db } = await getApp()); token = await loginAdmin(app) })
 
-  it('TF-01 调拨不改变总库存，只把库位移到目标（stock 不变、location_id=目标）', async () => {
+  it('TF-01 部分调拨不改变总库存，position 真实形成 70/30', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
-    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: f.loc1 })
+    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: null })
+    expect(positions(db, f.materialId)).toEqual([{ location_id: f.loc1, quantity: 100 }])
     const res = await request(app).post('/api/v1/transfers/inbound').set('Authorization', `Bearer ${token}`)
       .send({ materialId: f.materialId, quantity: 30, fromLocationId: f.loc1, toLocationId: f.loc2 })
     expect([200, 201]).toContain(res.status)
-    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: f.loc2 })
+    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: null })
+    expect(positions(db, f.materialId)).toEqual([
+      { location_id: f.loc1, quantity: 70 },
+      { location_id: f.loc2, quantity: 30 },
+    ])
   })
 
   it('TF-02 持久化 from_location_id（DB 落列 + GET 列表返回）', async () => {
@@ -177,14 +192,22 @@ describe('Lane C · 调拨(transfers) 语义：库位间移动、总库存不变
     expect(row.toLocationName).toBe('B区冷藏库')
   })
 
-  it('TF-03 撤销调拨还原库位、总库存仍不变', async () => {
+  it('TF-03 取消调拨进入 G2 补偿链，70/30 事实保持不变', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
     const c = await request(app).post('/api/v1/transfers/inbound').set('Authorization', `Bearer ${token}`)
       .send({ materialId: f.materialId, quantity: 30, fromLocationId: f.loc1, toLocationId: f.loc2 })
-    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: f.loc2 })
+    expect(positions(db, f.materialId)).toEqual([
+      { location_id: f.loc1, quantity: 70 },
+      { location_id: f.loc2, quantity: 30 },
+    ])
     const d = await request(app).delete(`/api/v1/transfers/${c.body.data.id}`).set('Authorization', `Bearer ${token}`)
-    expect(d.status).toBe(200)
-    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: f.loc1 })
+    expect(d.status).toBe(409)
+    expect(d.body.error.code).toBe('COMPENSATION_CHAIN_REQUIRED')
+    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: null })
+    expect(positions(db, f.materialId)).toEqual([
+      { location_id: f.loc1, quantity: 70 },
+      { location_id: f.loc2, quantity: 30 },
+    ])
   })
 
   it('TF-04 来源=目标库位被拒（400）', async () => {
@@ -192,7 +215,7 @@ describe('Lane C · 调拨(transfers) 语义：库位间移动、总库存不变
     const res = await request(app).post('/api/v1/transfers/inbound').set('Authorization', `Bearer ${token}`)
       .send({ materialId: f.materialId, quantity: 5, fromLocationId: f.loc1, toLocationId: f.loc1 })
     expect(res.status).toBe(400)
-    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: f.loc1 })
+    expect(inv(db, f.materialId)).toMatchObject({ stock: 100, location_id: null })
   })
 
   it('TF-05 无库存物料不能调拨（422），不新建 0 库存行', async () => {

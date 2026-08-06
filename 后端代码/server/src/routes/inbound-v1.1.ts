@@ -17,8 +17,9 @@ import {
   listActiveAllocationFacts,
   markAllocationFactsReversed,
   planBatchDeltas,
+  planPositionAdditions,
   replaceAllocationFacts,
-  type BatchDeltaInput,
+  type InventoryPlan,
 } from '../services/inventory-transactions.js'
 import {
   claimIdempotency,
@@ -31,6 +32,7 @@ import {
 
 const router = Router()
 const requireWriteAccess = requirePermission('inbound', 'W')
+const RESERVED_INBOUND_TYPES = new Set(['transfer', 'return'])
 
 function generateInboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -178,19 +180,12 @@ router.get('/:id/check-deletable', (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
-    if (record.status !== 'completed') { success(res, { deletable: true }); return }
-    if (!record.batch_id) { success(res, { deletable: false, reason: 'Batch allocation is unavailable' }); return }
-    const batch = db.prepare('SELECT quantity, remaining FROM batches WHERE id = ? AND material_id = ?').get(record.batch_id, record.material_id) as any
-    const inUse = (db.prepare("SELECT COUNT(*) c FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use'")
-      .get(record.material_id, record.batch_no) as any)?.c || 0
-    const remaining = batch ? parseFiniteNonNegativeNumber(batch.remaining) : null
-    const inboundQuantity = normalizeQuantity(record.quantity)
-    if (batch && (remaining === null || inboundQuantity === null)) {
-      error(res, 'Inbound batch quantity is corrupt', 'INVENTORY_LEDGER_CORRUPT', 409)
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
       return
     }
-    const deletable = Boolean(batch) && remaining! >= inboundQuantity! && Number(inUse) === 0
-    success(res, { deletable, reason: deletable ? null : 'Batch has been consumed or is in use' })
+    if (record.status !== 'completed') { success(res, { deletable: true }); return }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
   } catch (err: any) { error(res, err.message) }
 })
 
@@ -203,12 +198,19 @@ router.post('/', requireWriteAccess, (req, res) => {
     const qty = normalizeQuantity(quantity)
     const normalizedPrice = normalizePrice(price)
     const amount = qty === null || normalizedPrice === null ? null : calculateAmount(qty, normalizedPrice)
-    if (!type || !materialId || !String(batchNo || '').trim() || qty === null || normalizedPrice === null || amount === null || !locationId) {
+    if (!type || RESERVED_INBOUND_TYPES.has(type) || !materialId || qty === null || normalizedPrice === null || amount === null || !locationId) {
       error(res, 'Missing or invalid inbound fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
-    const material = db.prepare('SELECT unit FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
+    const material = db.prepare('SELECT unit, batch_managed FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
+    const normalizedBatchNo = String(batchNo || '').trim()
+    if (material.batch_managed === 1 && !normalizedBatchNo) {
+      error(res, 'Batch number is required for a batch-managed material', 'BATCH_REQUIRED', 400); return
+    }
+    if (material.batch_managed === 0 && normalizedBatchNo) {
+      error(res, 'Non-batch material cannot use a batch number', 'BATCH_FORBIDDEN', 400); return
+    }
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'inbound:create'
     const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
@@ -219,27 +221,38 @@ router.post('/', requireWriteAccess, (req, res) => {
     db.exec('BEGIN IMMEDIATE')
     try {
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator || 'system')
-      const existingBatch = resolveBatch(db, materialId, String(batchNo).trim())
-      const batchId = existingBatch?.id || uuidv4()
-      const plan = planBatchDeltas(db, [{
-        materialId,
-        batchId,
-        quantityDelta: qty,
-        remainingDelta: qty,
-        ownerLineId: id,
-        create: existingBatch ? undefined : {
-          id: batchId,
+      const existingBatch = material.batch_managed === 1
+        ? resolveBatch(db, materialId, normalizedBatchNo)
+        : null
+      const batchId = material.batch_managed === 1 ? (existingBatch?.id || uuidv4()) : null
+      const plan = material.batch_managed === 1
+        ? planBatchDeltas(db, [{
           materialId,
-          batchNo: String(batchNo).trim(),
+          batchId: batchId!,
+          locationId,
+          quantityDelta: qty,
+          remainingDelta: qty,
+          ownerLineId: id,
+          create: existingBatch ? undefined : {
+            id: batchId!,
+            materialId,
+            batchNo: normalizedBatchNo,
+            quantity: qty,
+            remaining: qty,
+            productionDate: productionDate || null,
+            expiryDate: expiryDate || null,
+            inboundId: id,
+            inboundPrice: normalizedPrice,
+            supplierId: supplierId || null,
+          },
+        }])
+        : planPositionAdditions(db, [{
+          materialId,
+          batchId: null,
+          locationId,
           quantity: qty,
-          remaining: qty,
-          productionDate: productionDate || null,
-          expiryDate: expiryDate || null,
-          inboundId: id,
-          inboundPrice: normalizedPrice,
-          supplierId: supplierId || null,
-        },
-      }])
+          ownerLineId: id,
+        }], { operationKind: 'inbound', ownerId: id })
       db.prepare(`
         INSERT INTO inbound_records
           (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount,
@@ -247,21 +260,21 @@ router.post('/', requireWriteAccess, (req, res) => {
            purchase_order_id, purchase_order_no)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
       `).run(
-        id, inboundNo, type, materialId, batchId, String(batchNo).trim(), qty, unit || material.unit || 'pcs',
+        id, inboundNo, type, materialId, batchId, normalizedBatchNo || null, qty, unit || material.unit || 'pcs',
         normalizedPrice, amount, supplierId || null, locationId, productionDate || null, expiryDate || null,
         operator || 'system', remark || null, purchaseOrderId || null, purchaseOrderNo || null,
       )
       applyInventoryPlan(db, plan)
       db.prepare(`
         UPDATE inventory
-        SET location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime')
+        SET last_inbound_id = ?, last_inbound_date = date('now','localtime')
         WHERE material_id = ?
-      `).run(locationId, id, materialId)
+      `).run(id, materialId)
       replaceAllocationFacts(db, {
         operationKind: 'inbound',
         ownerId: id,
         direction: 'in',
-        allocations: [{ materialId, batchId, quantity: qty, ownerLineId: id }],
+        allocations: plan.allocations,
       })
       updatePurchaseOrderReceived(db, purchaseOrderId || null, qty)
       writePlanLogs(db, plan, id, 'inbound', operator || 'system')
@@ -270,7 +283,7 @@ router.post('/', requireWriteAccess, (req, res) => {
         inboundNo,
         materialId,
         batchId,
-        batchNo: String(batchNo).trim(),
+        batchNo: normalizedBatchNo || null,
         quantity: qty,
         price: normalizedPrice,
         status: 'completed',
@@ -296,6 +309,18 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
+    if (req.body.type !== undefined && RESERVED_INBOUND_TYPES.has(req.body.type)) {
+      error(res, 'Reserved record types must use their dedicated route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
+      return
+    }
+    if (record.status === 'completed') {
+      error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+      return
+    }
     const qty = req.body.quantity === undefined ? normalizeQuantity(record.quantity) : normalizeQuantity(req.body.quantity)
     const price = req.body.price === undefined ? normalizePrice(record.price) : normalizePrice(req.body.price)
     const amount = qty === null || price === null ? null : calculateAmount(qty, price)
@@ -303,8 +328,18 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const materialId = req.body.materialId ?? record.material_id
     const batchNo = String(req.body.batchNo ?? record.batch_no ?? '').trim()
     const locationId = req.body.locationId ?? record.location_id
-    if (qty === null || price === null || amount === null || !batchNo || !locationId || !['completed', 'cancelled'].includes(nextStatus)) {
+    const material = db.prepare(
+      'SELECT unit, batch_managed FROM materials WHERE id = ? AND is_deleted = 0',
+    ).get(materialId) as any
+    if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
+    if (qty === null || price === null || amount === null || !locationId || !['completed', 'cancelled'].includes(nextStatus)) {
       error(res, 'Invalid inbound update', 'INVALID_PARAMETER', 400); return
+    }
+    if (nextStatus === 'completed' && material.batch_managed === 1 && !batchNo) {
+      error(res, 'Batch number is required for a batch-managed material', 'BATCH_REQUIRED', 400); return
+    }
+    if (nextStatus === 'completed' && material.batch_managed === 0 && batchNo) {
+      error(res, 'Non-batch material cannot use a batch number', 'BATCH_FORBIDDEN', 400); return
     }
     const idemKey = readIdempotencyKey(req)
     const idemScope = `inbound:update:${req.params.id}`
@@ -320,80 +355,57 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         db.exec('ROLLBACK')
         return
       }
-      const oldQty = normalizeQuantity(locked.quantity)
-      if (oldQty === null) throw new Error('Inbound source quantity is corrupt')
-      const deltas: BatchDeltaInput[] = []
-      let oldBatch: any = null
-      if (locked.status === 'completed') {
-        oldBatch = locked.batch_id
-          ? db.prepare('SELECT * FROM batches WHERE id = ? AND material_id = ?').get(locked.batch_id, locked.material_id)
-          : resolveBatch(db, locked.material_id, locked.batch_no)
-        if (!oldBatch) {
-          error(res, 'Inbound batch allocation is unavailable', 'ALLOCATION_NOT_FOUND', 409)
-          db.exec('ROLLBACK')
-          return
-        }
+      const lockedMaterial = db.prepare(
+        'SELECT batch_managed FROM materials WHERE id = ? AND is_deleted = 0',
+      ).get(materialId) as any
+      if (!lockedMaterial || lockedMaterial.batch_managed !== material.batch_managed) {
+        error(res, 'Material policy changed before update', 'CONCURRENT_MODIFICATION', 409)
+        db.exec('ROLLBACK')
+        return
       }
-      let nextBatch: any = null
       let nextBatchId: string | null = null
-      let nextBatchCreate: BatchDeltaInput['create']
-      if (nextStatus === 'completed') {
-        nextBatch = resolveBatch(db, materialId, batchNo)
+      let plan: InventoryPlan = { materials: [], allocations: [] }
+      if (nextStatus === 'completed' && material.batch_managed === 1) {
+        const nextBatch = resolveBatch(db, materialId, batchNo)
         const resolvedNextBatchId: string = nextBatch?.id || uuidv4()
         nextBatchId = resolvedNextBatchId
-        nextBatchCreate = nextBatch ? undefined : {
-          id: resolvedNextBatchId,
-          materialId,
-          batchNo,
-          quantity: qty,
-          remaining: qty,
-          productionDate: req.body.productionDate ?? locked.production_date,
-          expiryDate: req.body.expiryDate ?? locked.expiry_date,
-          inboundId: locked.id,
-          inboundPrice: price,
-          supplierId: req.body.supplierId ?? locked.supplier_id,
-        }
-      }
-      if (locked.status === 'completed' && nextStatus === 'completed'
-        && oldBatch.id === nextBatchId && locked.material_id === materialId) {
-        deltas.push({
-          materialId,
-          batchId: nextBatchId!,
-          quantityDelta: qty - oldQty,
-          remainingDelta: qty - oldQty,
-          ownerLineId: locked.id,
-        })
-      } else {
-        if (locked.status === 'completed') {
-          deltas.push({
-            materialId: locked.material_id,
-            batchId: oldBatch.id,
-            quantityDelta: -oldQty,
-            remainingDelta: -oldQty,
-            ownerLineId: locked.id,
-          })
-        }
-        if (nextStatus === 'completed' && nextBatchId) {
-          deltas.push({
+        plan = planBatchDeltas(db, [{
             materialId,
-            batchId: nextBatchId,
+            batchId: resolvedNextBatchId,
+            locationId,
             quantityDelta: qty,
             remainingDelta: qty,
             ownerLineId: locked.id,
-            create: nextBatchCreate,
-          })
-        }
+            create: nextBatch ? undefined : {
+              id: resolvedNextBatchId,
+              materialId,
+              batchNo,
+              quantity: qty,
+              remaining: qty,
+              productionDate: req.body.productionDate ?? locked.production_date,
+              expiryDate: req.body.expiryDate ?? locked.expiry_date,
+              inboundId: locked.id,
+              inboundPrice: price,
+              supplierId: req.body.supplierId ?? locked.supplier_id,
+            },
+          }])
+      } else if (nextStatus === 'completed') {
+        plan = planPositionAdditions(db, [{
+          materialId,
+          batchId: null,
+          locationId,
+          quantity: qty,
+          ownerLineId: locked.id,
+        }], { operationKind: 'inbound', ownerId: locked.id })
       }
-      const plan = deltas.length > 0 ? planBatchDeltas(db, deltas) : { materials: [], allocations: [] }
       applyInventoryPlan(db, plan)
       if (nextStatus === 'completed') {
         db.prepare(`
           UPDATE inventory
-          SET location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime')
+          SET last_inbound_id = ?, last_inbound_date = date('now','localtime')
           WHERE material_id = ?
-        `).run(locationId, locked.id, materialId)
+        `).run(locked.id, materialId)
       }
-      if (locked.status === 'completed') updatePurchaseOrderReceived(db, locked.purchase_order_id, -oldQty)
       const nextPurchaseOrderId = req.body.purchaseOrderId ?? locked.purchase_order_id
       if (nextStatus === 'completed') updatePurchaseOrderReceived(db, nextPurchaseOrderId, qty)
       db.prepare(`
@@ -407,7 +419,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         req.body.type ?? locked.type,
         materialId,
         nextBatchId,
-        batchNo,
+        batchNo || null,
         qty,
         req.body.unit ?? locked.unit,
         price,
@@ -424,12 +436,12 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         req.body.purchaseOrderNo ?? locked.purchase_order_no,
         locked.id,
       )
-      if (nextStatus === 'completed' && nextBatchId) {
+      if (nextStatus === 'completed') {
         replaceAllocationFacts(db, {
           operationKind: 'inbound',
           ownerId: locked.id,
           direction: 'in',
-          allocations: [{ materialId, batchId: nextBatchId, quantity: qty, ownerLineId: locked.id }],
+          allocations: plan.allocations,
         })
       } else if (listActiveAllocationFacts(db, 'inbound', locked.id).length > 0) {
         markAllocationFactsReversed(db, 'inbound', locked.id)
@@ -455,73 +467,34 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 function cancelOrDeleteInbound(req: any, res: any, deleteRecord: boolean): void {
   try {
     const db = getDatabase()
-    const idemKey = readIdempotencyKey(req)
-    const action = deleteRecord ? 'delete' : 'cancel'
-    const idemScope = `inbound:${action}:${req.params.id}`
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
-    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, 'Inbound record not found', 'NOT_FOUND', 404); return }
-    if (record.status !== 'completed') {
-      if (deleteRecord) {
-        let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
-        db.exec('BEGIN IMMEDIATE')
-        try {
-          if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, req.body?.operator || 'system')
-          db.prepare('UPDATE inbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id)
-          responseEnvelope = buildSuccessEnvelope(null, 'Inbound record deleted')
-          if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
-          db.exec('COMMIT')
-          res.status(200).json(responseEnvelope)
-        } catch (err) {
-          db.exec('ROLLBACK')
-          if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
-          throw err
-        }
-        return
-      }
-      error(res, 'Inbound record is not completed', 'INVALID_PARAMETER', 400)
+    if (RESERVED_INBOUND_TYPES.has(record.type)) {
+      error(res, 'This record is immutable through the inbound route', 'ROUTE_OWNERSHIP_VIOLATION', 409)
       return
     }
+    if (record.status === 'completed') {
+      error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+      return
+    }
+    if (!deleteRecord) { error(res, 'Inbound record is not completed', 'INVALID_PARAMETER', 400); return }
+
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = `inbound:delete:${req.params.id}`
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, req.body?.operator || 'system')
-      const locked = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
-      if (!locked || locked.status !== 'completed') {
-        error(res, 'Inbound record changed before cancellation', 'CONCURRENT_MODIFICATION', 409)
+      const locked = db.prepare('SELECT status FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+      if (!locked || locked.status === 'completed') {
+        error(res, 'Inbound record changed before deletion', 'CONCURRENT_MODIFICATION', 409)
         db.exec('ROLLBACK')
         return
       }
-      const qty = normalizeQuantity(locked.quantity)
-      if (qty === null) throw new Error('Inbound source quantity is corrupt')
-      const batch = locked.batch_id
-        ? db.prepare('SELECT * FROM batches WHERE id = ? AND material_id = ?').get(locked.batch_id, locked.material_id)
-        : resolveBatch(db, locked.material_id, locked.batch_no)
-      if (!batch) {
-        error(res, 'Inbound batch allocation is unavailable', 'ALLOCATION_NOT_FOUND', 409)
-        db.exec('ROLLBACK')
-        return
-      }
-      const plan = planBatchDeltas(db, [{
-        materialId: locked.material_id,
-        batchId: batch.id,
-        quantityDelta: -qty,
-        remainingDelta: -qty,
-        ownerLineId: locked.id,
-      }])
-      applyInventoryPlan(db, plan)
-      updatePurchaseOrderReceived(db, locked.purchase_order_id, -qty)
-      db.prepare(`
-        UPDATE inbound_records
-        SET status = 'cancelled', cancel_reason = ?, is_deleted = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(req.body?.reason || req.body?.cancelReason || null, deleteRecord ? 1 : 0, locked.id)
-      if (listActiveAllocationFacts(db, 'inbound', locked.id).length > 0) {
-        markAllocationFactsReversed(db, 'inbound', locked.id)
-      }
-      writePlanLogs(db, plan, locked.id, deleteRecord ? 'inbound_delete' : 'inbound_cancel', req.body?.operator || 'system')
-      responseEnvelope = buildSuccessEnvelope(null, deleteRecord ? 'Inbound record deleted' : 'Inbound record cancelled')
+      db.prepare('UPDATE inbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id)
+      responseEnvelope = buildSuccessEnvelope(null, 'Inbound record deleted')
       if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
       res.status(200).json(responseEnvelope)

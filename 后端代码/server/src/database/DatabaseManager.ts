@@ -1047,6 +1047,290 @@ function ensureDatabaseColumn(
   }
 }
 
+const INVENTORY_POSITION_QUANTITY_CHECK = `
+  typeof(quantity) IN ('integer', 'real')
+  AND quantity > 0
+  AND quantity <= 900719925474.0991
+  AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+`
+
+function inventoryPositionMigrationError(message: string): Error & { code: string } {
+  const error = new Error(message) as Error & { code: string }
+  error.code = 'INVENTORY_POSITION_MIGRATION_UNPROVABLE'
+  return error
+}
+
+function tableColumns(database: DatabaseSync, table: string): Set<string> {
+  return new Set(
+    (database.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>)
+      .map(column => column.name),
+  )
+}
+
+function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_transaction_allocations (
+      id TEXT PRIMARY KEY,
+      operation_kind TEXT NOT NULL
+        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return', 'transfer')),
+      owner_id TEXT NOT NULL,
+      owner_line_id TEXT,
+      material_id TEXT NOT NULL,
+      batch_id TEXT,
+      location_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+      quantity DECIMAL(18, 4) NOT NULL CHECK (${INVENTORY_POSITION_QUANTITY_CHECK}),
+      source_allocation_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+}
+
+/**
+ * PIS-INV-G01 canonical storage only. This function deliberately does not infer
+ * legacy balances. Production data conversion is a separate, explicit gate.
+ */
+export function ensureInventoryPositionSchema(database: DatabaseSync): void {
+  ensureDatabaseColumn(
+    database,
+    'materials',
+    'batch_managed',
+    'INTEGER NOT NULL DEFAULT 1 CHECK (batch_managed IN (0, 1))',
+  )
+  ensureDatabaseColumn(
+    database,
+    'materials',
+    'units_per_package',
+    "DECIMAL(18, 4) CHECK (units_per_package IS NULL OR (typeof(units_per_package) IN ('integer', 'real') AND units_per_package > 0 AND units_per_package <= 900719925474.0991 AND abs(units_per_package * 10000 - round(units_per_package * 10000)) < 0.000001))",
+  )
+  ensureDatabaseColumn(
+    database,
+    'materials',
+    'slots_per_package',
+    "DECIMAL(18, 4) CHECK (slots_per_package IS NULL OR (typeof(slots_per_package) IN ('integer', 'real') AND slots_per_package > 0 AND slots_per_package <= 900719925474.0991 AND abs(slots_per_package * 10000 - round(slots_per_package * 10000)) < 0.000001))",
+  )
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_positions (
+      id TEXT PRIMARY KEY,
+      material_id TEXT NOT NULL,
+      batch_id TEXT,
+      location_id TEXT NOT NULL,
+      quantity DECIMAL(18, 4) NOT NULL CHECK (${INVENTORY_POSITION_QUANTITY_CHECK}),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_positions_batch
+      ON inventory_positions(material_id, batch_id, location_id)
+      WHERE batch_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_positions_non_batch
+      ON inventory_positions(material_id, location_id)
+      WHERE batch_id IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_inventory_positions_location
+      ON inventory_positions(location_id, material_id);
+
+    CREATE TABLE IF NOT EXISTS inventory_capacity_audits (
+      id TEXT PRIMARY KEY,
+      decision TEXT NOT NULL CHECK (decision = 'allowed_missing_conversion'),
+      operation_kind TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      location_id TEXT NOT NULL,
+      details_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_capacity_audit_identity
+      ON inventory_capacity_audits(operation_kind, owner_id, material_id, location_id);
+
+    CREATE TABLE IF NOT EXISTS inventory_position_migrations (
+      id TEXT PRIMARY KEY,
+      migrated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      materials INTEGER NOT NULL,
+      positions INTEGER NOT NULL
+    );
+  `)
+
+  const allocationColumns = tableColumns(database, 'inventory_transaction_allocations')
+  if (allocationColumns.size === 0) {
+    createCanonicalInventoryAllocationTable(database)
+  } else if (!allocationColumns.has('location_id') || allocationColumns.has('is_reversed')) {
+    const count = Number((database.prepare(
+      'SELECT COUNT(*) AS count FROM inventory_transaction_allocations',
+    ).get() as { count: number }).count)
+    if (count !== 0) {
+      throw inventoryPositionMigrationError(
+        'legacy allocation facts cannot be assigned to locations without an approved real-data migration',
+      )
+    }
+    database.exec('DROP TABLE inventory_transaction_allocations')
+    createCanonicalInventoryAllocationTable(database)
+  }
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner
+      ON inventory_transaction_allocations(operation_kind, owner_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_source
+      ON inventory_transaction_allocations(source_allocation_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_allocations_identity
+      ON inventory_transaction_allocations(
+        operation_kind,
+        owner_id,
+        COALESCE(owner_line_id, ''),
+        material_id,
+        COALESCE(batch_id, ''),
+        location_id,
+        direction
+      );
+  `)
+}
+
+function assertLegacyQuantity(value: unknown, label: string): number {
+  const parsed = Number(value)
+  const scaled = parsed * 10_000
+  if (
+    !Number.isFinite(parsed)
+    || parsed < 0
+    || parsed > 900719925474.0991
+    || !Number.isSafeInteger(Math.round(scaled))
+    || Math.abs(scaled - Math.round(scaled)) >= 0.000001
+  ) {
+    throw inventoryPositionMigrationError(`${label} is not a supported non-negative four-decimal quantity`)
+  }
+  return Math.round(scaled) / 10_000
+}
+
+/**
+ * Synthetic-only predecessor converter. Callers must provide an isolated
+ * database whose provenance is already authorized. It is never called by
+ * initializeDatabase(), so startup cannot silently rewrite a real database.
+ */
+export function migrateLegacyInventoryPositions(
+  database: DatabaseSync,
+): { materials: number; positions: number } {
+  const marker = database.prepare(
+    "SELECT 1 AS ok FROM inventory_position_migrations WHERE id = 'legacy-single-location-v1'",
+  ).get()
+  if (marker) return { materials: 0, positions: 0 }
+
+  const existing = Number((database.prepare(
+    'SELECT COUNT(*) AS count FROM inventory_positions',
+  ).get() as { count: number }).count)
+  if (existing !== 0) {
+    throw inventoryPositionMigrationError('unmarked inventory positions already exist')
+  }
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    const inventories = database.prepare(`
+      SELECT i.material_id, i.stock, i.locked_stock, i.location_id, m.batch_managed
+      FROM inventory i
+      JOIN materials m ON m.id = i.material_id
+      ORDER BY i.material_id
+    `).all() as Array<{
+      material_id: string
+      stock: unknown
+      locked_stock: unknown
+      location_id: string | null
+      batch_managed: number
+    }>
+    const insertPosition = database.prepare(`
+      INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    let positionCount = 0
+
+    for (const inventory of inventories) {
+      const stock = assertLegacyQuantity(inventory.stock, `inventory ${inventory.material_id} stock`)
+      const locked = assertLegacyQuantity(inventory.locked_stock, `inventory ${inventory.material_id} locked stock`)
+      if (locked !== 0) {
+        throw inventoryPositionMigrationError(`inventory ${inventory.material_id} has unlocated locked stock`)
+      }
+      const batchRows = database.prepare(`
+        SELECT id, remaining
+        FROM batches
+        WHERE material_id = ?
+        ORDER BY id
+      `).all(inventory.material_id) as Array<{ id: string; remaining: unknown }>
+
+      if (inventory.batch_managed === 0) {
+        if (batchRows.length !== 0) {
+          throw inventoryPositionMigrationError(`non-batch material ${inventory.material_id} has batch history`)
+        }
+        if (stock > 0) {
+          if (!inventory.location_id) {
+            throw inventoryPositionMigrationError(`inventory ${inventory.material_id} has no provable location`)
+          }
+          const location = database.prepare(
+            'SELECT 1 AS ok FROM locations WHERE id = ? AND status = 1 AND is_deleted = 0',
+          ).get(inventory.location_id)
+          if (!location) throw inventoryPositionMigrationError(`inventory ${inventory.material_id} location is unavailable`)
+          const id = createHash('sha256').update(`legacy|${inventory.material_id}||${inventory.location_id}`).digest('hex')
+          insertPosition.run(id, inventory.material_id, null, inventory.location_id, stock)
+          positionCount += 1
+        }
+        continue
+      }
+      if (inventory.batch_managed !== 1) {
+        throw inventoryPositionMigrationError(`material ${inventory.material_id} has an invalid batch policy`)
+      }
+
+      let batchTotal = 0
+      for (const batch of batchRows) {
+        const remaining = assertLegacyQuantity(batch.remaining, `batch ${batch.id} remaining`)
+        batchTotal = assertLegacyQuantity(batchTotal + remaining, `material ${inventory.material_id} batch total`)
+        if (remaining === 0) continue
+        if (!inventory.location_id) {
+          throw inventoryPositionMigrationError(`inventory ${inventory.material_id} has no provable location`)
+        }
+        const inboundLocations = database.prepare(`
+          SELECT DISTINCT location_id
+          FROM inbound_records
+          WHERE batch_id = ? AND status = 'completed' AND is_deleted = 0
+          ORDER BY location_id
+        `).all(batch.id) as Array<{ location_id: string }>
+        if (
+          inboundLocations.length !== 1
+          || inboundLocations[0].location_id !== inventory.location_id
+        ) {
+          throw inventoryPositionMigrationError(`batch ${batch.id} has no unique provable location`)
+        }
+        const location = database.prepare(
+          'SELECT 1 AS ok FROM locations WHERE id = ? AND status = 1 AND is_deleted = 0',
+        ).get(inventory.location_id)
+        if (!location) throw inventoryPositionMigrationError(`batch ${batch.id} location is unavailable`)
+        const id = createHash('sha256').update(
+          `legacy|${inventory.material_id}|${batch.id}|${inventory.location_id}`,
+        ).digest('hex')
+        insertPosition.run(id, inventory.material_id, batch.id, inventory.location_id, remaining)
+        positionCount += 1
+      }
+      if (stock !== batchTotal) {
+        throw inventoryPositionMigrationError(`inventory ${inventory.material_id} differs from batch remaining`)
+      }
+    }
+
+    const orphanBatches = Number((database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM batches b
+      LEFT JOIN inventory i ON i.material_id = b.material_id
+      WHERE i.material_id IS NULL AND b.remaining > 0
+    `).get() as { count: number }).count)
+    if (orphanBatches !== 0) throw inventoryPositionMigrationError('positive batch exists without inventory')
+
+    database.prepare(`
+      INSERT INTO inventory_position_migrations (id, materials, positions)
+      VALUES ('legacy-single-location-v1', ?, ?)
+    `).run(inventories.length, positionCount)
+    database.exec('COMMIT')
+    return { materials: inventories.length, positions: positionCount }
+  } catch (error) {
+    try { database.exec('ROLLBACK') } catch { /* preserve the original validation failure */ }
+    if (error && typeof error === 'object' && 'code' in error) throw error
+    const detail = error instanceof Error ? error.message : String(error)
+    throw inventoryPositionMigrationError(detail)
+  }
+}
+
 function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
   const columns = database.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>
   const table = database.prepare(
@@ -3152,7 +3436,7 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS material_categories (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, parent_id TEXT, level INTEGER NOT NULL, sort_order INTEGER DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS materials (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, spec TEXT, unit TEXT NOT NULL, spec_qty DECIMAL(18, 4) DEFAULT 0, spec_unit TEXT, category_id TEXT NOT NULL, supplier_id TEXT, price DECIMAL(18, 4) DEFAULT 0, min_stock INTEGER DEFAULT 0, max_stock INTEGER DEFAULT 999999, safety_stock INTEGER DEFAULT 0, location_id TEXT, status INTEGER NOT NULL DEFAULT 1, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
+    CREATE TABLE IF NOT EXISTS materials (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, spec TEXT, unit TEXT NOT NULL, spec_qty DECIMAL(18, 4) DEFAULT 0, spec_unit TEXT, category_id TEXT NOT NULL, supplier_id TEXT, price DECIMAL(18, 4) DEFAULT 0, min_stock INTEGER DEFAULT 0, max_stock INTEGER DEFAULT 999999, safety_stock INTEGER DEFAULT 0, location_id TEXT, batch_managed INTEGER NOT NULL DEFAULT 1 CHECK (batch_managed IN (0, 1)), units_per_package DECIMAL(18, 4) CHECK (units_per_package IS NULL OR (typeof(units_per_package) IN ('integer', 'real') AND units_per_package > 0 AND units_per_package <= 900719925474.0991 AND abs(units_per_package * 10000 - round(units_per_package * 10000)) < 0.000001)), slots_per_package DECIMAL(18, 4) CHECK (slots_per_package IS NULL OR (typeof(slots_per_package) IN ('integer', 'real') AND slots_per_package > 0 AND slots_per_package <= 900719925474.0991 AND abs(slots_per_package * 10000 - round(slots_per_package * 10000)) < 0.000001)), status INTEGER NOT NULL DEFAULT 1, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS suppliers (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, contact TEXT, phone TEXT, email TEXT, address TEXT, tax_no TEXT, bank_name TEXT, bank_account TEXT, status INTEGER NOT NULL DEFAULT 1, cooperation_count INTEGER DEFAULT 0, total_amount DECIMAL(18, 4) DEFAULT 0, rating INTEGER DEFAULT 5, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
@@ -3377,51 +3661,10 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS idempotency_keys (idempotency_key TEXT PRIMARY KEY, scope TEXT NOT NULL, request_fingerprint TEXT NOT NULL, status_code INTEGER, response_body TEXT, operator TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS inventory_transaction_allocations (
-      id TEXT PRIMARY KEY,
-      operation_kind TEXT NOT NULL
-        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return')),
-      owner_id TEXT NOT NULL,
-      owner_line_id TEXT,
-      material_id TEXT NOT NULL,
-      batch_id TEXT NOT NULL,
-      direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
-      quantity DECIMAL(18, 4) NOT NULL
-        CHECK (
-          typeof(quantity) IN ('integer', 'real')
-          AND quantity > 0
-          AND quantity <= 900719925474.0991
-          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
-        ),
-      source_allocation_id TEXT,
-      is_reversed INTEGER NOT NULL DEFAULT 0 CHECK (is_reversed IN (0, 1)),
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      reversed_at DATETIME,
-      CHECK (
-        (is_reversed = 0 AND reversed_at IS NULL)
-        OR (is_reversed = 1 AND reversed_at IS NOT NULL)
-      ),
-      UNIQUE(operation_kind, owner_id, owner_line_id, batch_id)
-    )
-  `)
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner
-    ON inventory_transaction_allocations(operation_kind, owner_id, is_reversed)
-  `)
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_source
-    ON inventory_transaction_allocations(source_allocation_id, is_reversed)
-  `)
-  database.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_allocations_identity
-    ON inventory_transaction_allocations(
-      operation_kind,
-      owner_id,
-      COALESCE(owner_line_id, ''),
-      batch_id
-    )
-  `)
+  createCanonicalInventoryAllocationTable(database)
+  // Only creates canonical storage. Deliberately does not convert any legacy
+  // balance: real-data migration requires a separately approved invocation.
+  ensureInventoryPositionSchema(database)
   database.exec(`
     CREATE TABLE IF NOT EXISTS alert_rules (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, threshold INTEGER, threshold_days INTEGER, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)

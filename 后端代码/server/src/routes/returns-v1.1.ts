@@ -9,10 +9,7 @@ import {
   assertSourceAllocationCapacity,
   getSourceAllocationRemaining,
   inventoryErrorResponse,
-  listActiveAllocationFacts,
-  markAllocationFactsReversed,
-  planExactInventoryAdditions,
-  planInventoryDeductions,
+  planPositionAdditions,
   replaceAllocationFacts,
 } from '../services/inventory-transactions.js'
 import {
@@ -51,14 +48,12 @@ function listReturnSources(materialId: string): any[] {
         WHERE r.operation_kind = 'return'
           AND r.direction = 'in'
           AND r.source_allocation_id = a.id
-          AND r.is_reversed = 0
       ), 0) AS returned_quantity
     FROM inventory_transaction_allocations a
     JOIN outbound_records o ON o.id = a.owner_id
-    JOIN batches b ON b.id = a.batch_id AND b.material_id = a.material_id
+    LEFT JOIN batches b ON b.id = a.batch_id AND b.material_id = a.material_id
     WHERE a.operation_kind = 'outbound'
       AND a.direction = 'out'
-      AND a.is_reversed = 0
       AND a.material_id = ?
       AND o.is_deleted = 0
       AND o.status = 'completed'
@@ -147,9 +142,11 @@ router.get('/stats', (_req, res) => {
 
 router.post('/', requireReturnsWrite, (req, res) => {
   try {
-    const { materialId, quantity, reason, operator, remark, sourceAllocationId } = req.body
+    const {
+      materialId, quantity, reason, operator, remark, sourceAllocationId, targetLocationId, batchId,
+    } = req.body
     const qty = parseFinitePositiveNumber(quantity)
-    if (!materialId || qty === null || !reason || !sourceAllocationId) {
+    if (!materialId || qty === null || !reason || (!sourceAllocationId && !targetLocationId)) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
@@ -164,40 +161,46 @@ router.post('/', requireReturnsWrite, (req, res) => {
     db.exec('BEGIN IMMEDIATE')
     try {
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator || 'system')
-      const source = db.prepare(`
-        SELECT a.*, o.status AS outbound_status, o.is_deleted AS outbound_deleted,
-          COALESCE((
-            SELECT SUM(r.quantity)
-            FROM inventory_transaction_allocations r
-            WHERE r.operation_kind = 'return'
-              AND r.source_allocation_id = a.id
-              AND r.is_reversed = 0
-          ), 0) AS returned_quantity
-        FROM inventory_transaction_allocations a
-        JOIN outbound_records o ON o.id = a.owner_id
-        WHERE a.id = ?
-          AND a.operation_kind = 'outbound'
-          AND a.direction = 'out'
-          AND a.is_reversed = 0
-      `).get(sourceAllocationId) as any
-      if (!source || source.material_id !== materialId || source.outbound_status !== 'completed' || source.outbound_deleted !== 0) {
-        error(res, 'Return source is unavailable or belongs to another material', 'RETURN_SOURCE_INVALID', 422)
-        db.exec('ROLLBACK')
-        return
-      }
-      assertSourceAllocationCapacity(source.quantity, source.returned_quantity, qty)
       const id = uuidv4()
-      const plan = planExactInventoryAdditions(db, [{
+      let source: any = null
+      if (sourceAllocationId) {
+        source = db.prepare(`
+          SELECT a.*, o.status AS outbound_status, o.is_deleted AS outbound_deleted,
+            COALESCE((
+              SELECT SUM(r.quantity)
+              FROM inventory_transaction_allocations r
+              WHERE r.operation_kind = 'return' AND r.source_allocation_id = a.id
+            ), 0) AS returned_quantity
+          FROM inventory_transaction_allocations a
+          JOIN outbound_records o ON o.id = a.owner_id
+          WHERE a.id = ? AND a.operation_kind = 'outbound' AND a.direction = 'out'
+        `).get(sourceAllocationId) as any
+        if (!source || source.material_id !== materialId || source.outbound_status !== 'completed' || source.outbound_deleted !== 0) {
+          error(res, 'Return source is unavailable or belongs to another material', 'RETURN_SOURCE_INVALID', 422)
+          db.exec('ROLLBACK')
+          return
+        }
+        assertSourceAllocationCapacity(source.quantity, source.returned_quantity, qty)
+      } else {
+        const material = db.prepare('SELECT batch_managed FROM materials WHERE id = ?').get(materialId) as any
+        if (material?.batch_managed === 1 && !batchId) {
+          error(res, 'A batch is required when a batch-managed return has no source allocation', 'BATCH_REQUIRED', 400)
+          db.exec('ROLLBACK')
+          return
+        }
+      }
+      const plan = planPositionAdditions(db, [{
         materialId,
-        batchId: source.batch_id,
+        batchId: source ? source.batch_id : (batchId || null),
+        locationId: source ? source.location_id : targetLocationId,
         quantity: qty,
-        ownerLineId: sourceAllocationId,
-        sourceAllocationId,
-      }])
+        ownerLineId: sourceAllocationId || id,
+        sourceAllocationId: sourceAllocationId || null,
+      }], { operationKind: 'return', ownerId: id })
       db.prepare(`
         INSERT INTO return_records (id, return_no, material_id, batch_id, quantity, reason, operator, remark)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, generateNo(), materialId, source.batch_id, qty, reason, operator || 'system', remark || null)
+      `).run(id, generateNo(), materialId, source ? source.batch_id : (batchId || null), qty, reason, operator || 'system', remark || null)
       applyInventoryPlan(db, plan)
       replaceAllocationFacts(db, { operationKind: 'return', ownerId: id, direction: 'in', allocations: plan.allocations })
       const allocation = plan.allocations[0]
@@ -225,52 +228,10 @@ router.delete('/:id', requireReturnsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const idemKey = readIdempotencyKey(req)
-    const idemScope = `return:delete:${id}`
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
-    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     if (!db.prepare('SELECT id FROM return_records WHERE id = ? AND is_deleted = 0').get(id)) {
       error(res, 'Return record not found', 'NOT_FOUND', 404); return
     }
-    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, req.body?.operator || 'system')
-      if (!db.prepare('SELECT id FROM return_records WHERE id = ? AND is_deleted = 0').get(id)) {
-        error(res, 'Return record changed before cancellation', 'CONCURRENT_MODIFICATION', 409)
-        db.exec('ROLLBACK')
-        return
-      }
-      const facts = listActiveAllocationFacts(db, 'return', id)
-      if (facts.length === 0) {
-        error(res, 'Return allocation is unavailable', 'ALLOCATION_NOT_FOUND', 409)
-        db.exec('ROLLBACK')
-        return
-      }
-      const plan = planInventoryDeductions(db, facts.map((fact) => ({
-        materialId: fact.material_id,
-        quantity: fact.quantity,
-        pinnedBatchId: fact.batch_id,
-        ownerLineId: fact.id,
-      })))
-      db.prepare('UPDATE return_records SET is_deleted = 1 WHERE id = ?').run(id)
-      applyInventoryPlan(db, plan)
-      markAllocationFactsReversed(db, 'return', id)
-      for (const allocation of plan.allocations) {
-        db.prepare(`
-          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-          VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'return_cancel', ?, 'return cancellation')
-        `).run(uuidv4(), allocation.materialId, -allocation.quantity, allocation.inventoryBefore, allocation.inventoryAfter, id, req.body?.operator || 'system')
-      }
-      responseEnvelope = buildSuccessEnvelope(null, 'Return cancelled')
-      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
-      db.exec('COMMIT')
-      res.status(200).json(responseEnvelope)
-    } catch (err) {
-      db.exec('ROLLBACK')
-      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
-      throw err
-    }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
   } catch (err: any) {
     const failure = inventoryErrorResponse(err)
     if (failure) { error(res, failure.message, failure.code, failure.status); return }

@@ -23,6 +23,18 @@ function parseFiniteNonNegativeNumber(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
+function parseOptionalPositiveNumber(value: unknown): number | null | undefined {
+  if (value === undefined || value === null || value === '') return value === undefined ? undefined : null
+  const parsed = Number(value)
+  const scaled = parsed * 10_000
+  return Number.isFinite(parsed)
+    && parsed > 0
+    && Number.isSafeInteger(Math.round(scaled))
+    && Math.abs(scaled - Math.round(scaled)) < 0.000001
+    ? parsed
+    : undefined
+}
+
 router.get('/', (req, res) => {
   try {
     let { page = 1, pageSize = 20, keyword, categoryId, supplierId, status } = req.query
@@ -42,12 +54,12 @@ router.get('/', (req, res) => {
     const count = (db.prepare(countSql).get(...params) as any)?.total || 0
 
     let sql = `
-      SELECT m.*, c.name as category_name, s.name as supplier_name, l.name as location_name, COALESCE(i.stock, 0) as stock
+      SELECT m.*, c.name as category_name, s.name as supplier_name, l.name as location_name,
+        COALESCE((SELECT SUM(p.quantity) FROM inventory_positions p WHERE p.material_id = m.id), 0) as stock
       FROM materials m
       LEFT JOIN material_categories c ON m.category_id = c.id
       LEFT JOIN suppliers s ON m.supplier_id = s.id
       LEFT JOIN locations l ON m.location_id = l.id
-      LEFT JOIN inventory i ON m.id = i.material_id
       WHERE ${where}
       ORDER BY m.created_at DESC
       LIMIT ? OFFSET ?
@@ -60,6 +72,9 @@ router.get('/', (req, res) => {
       specQty: row.spec_qty, specUnit: row.spec_unit,
       price: row.price, stock: row.stock, minStock: row.min_stock, maxStock: row.max_stock,
       safetyStock: row.safety_stock, locationId: row.location_id, locationName: row.location_name,
+      batchManaged: row.batch_managed === 1,
+      unitsPerPackage: row.units_per_package,
+      slotsPerPackage: row.slots_per_package,
       categoryId: row.category_id, categoryPath: row.category_name, supplierId: row.supplier_id,
       supplierName: row.supplier_name, status: row.status === 1 ? 'active' : 'inactive',
       remark: row.remark, createdAt: row.created_at, updatedAt: row.updated_at,
@@ -83,30 +98,48 @@ router.get('/:id', (req, res) => {
     const db = getDatabase()
 
     const row = db.prepare(`
-      SELECT m.*, c.name as category_name, s.name as supplier_name, l.name as location_name, COALESCE(i.stock, 0) as stock
+      SELECT m.*, c.name as category_name, s.name as supplier_name, l.name as location_name,
+        COALESCE((SELECT SUM(p.quantity) FROM inventory_positions p WHERE p.material_id = m.id), 0) as stock
       FROM materials m
       LEFT JOIN material_categories c ON m.category_id = c.id AND c.is_deleted = 0
       LEFT JOIN suppliers s ON m.supplier_id = s.id AND s.is_deleted = 0
       LEFT JOIN locations l ON m.location_id = l.id AND l.is_deleted = 0
-      LEFT JOIN inventory i ON m.id = i.material_id
       WHERE m.id = ? AND m.is_deleted = 0
     `).get(id) as any
 
     if (!row) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
     const batches = db.prepare('SELECT * FROM batches WHERE material_id = ? AND status = 1 ORDER BY expiry_date').all(id) as any[]
+    const positions = db.prepare(`
+      SELECT p.batch_id, b.batch_no, p.location_id, l.name AS location_name, p.quantity
+      FROM inventory_positions p
+      LEFT JOIN batches b ON b.id = p.batch_id
+      JOIN locations l ON l.id = p.location_id
+      WHERE p.material_id = ?
+      ORDER BY COALESCE(b.expiry_date, '9999-12-31'), b.created_at, COALESCE(b.batch_no, ''), p.location_id
+    `).all(id) as any[]
     const stockLogs = db.prepare('SELECT * FROM stock_logs WHERE material_id = ? ORDER BY created_at DESC LIMIT 20').all(id) as any[]
 
     success(res, {
       id: row.id, code: row.code, name: row.name, spec: row.spec, unit: row.unit,
       price: row.price, stock: row.stock, minStock: row.min_stock, maxStock: row.max_stock,
       safetyStock: row.safety_stock, locationId: row.location_id, locationName: row.location_name,
+      batchManaged: row.batch_managed === 1,
+      unitsPerPackage: row.units_per_package,
+      slotsPerPackage: row.slots_per_package,
       categoryId: row.category_id, categoryPath: row.category_name, supplierId: row.supplier_id,
       supplierName: row.supplier_name, status: row.status === 1 ? 'active' : 'inactive',
       remark: row.remark,
       batches: batches.map((b: any) => ({
         id: b.id, batchNo: b.batch_no, quantity: b.quantity,
         productionDate: b.production_date, expiryDate: b.expiry_date, inboundId: b.inbound_id,
+      })),
+      positions: positions.map((position: any) => ({
+        batchId: position.batch_id,
+        batchNo: position.batch_no,
+        locationId: position.location_id,
+        locationName: position.location_name,
+        quantity: position.quantity,
       })),
       stockLogs: stockLogs.map((l: any) => ({
         id: l.id, type: l.type, quantity: l.quantity, beforeStock: l.before_stock,
@@ -134,7 +167,11 @@ function generateMaterialCode(db: any, categoryId: string): string {
 
 router.post('/', requireMaterialWrite, (req, res) => {
   try {
-    const { name, spec, unit, specQty, specUnit, categoryId, supplierId, price, minStock, maxStock, safetyStock, locationId, remark, code: userCode } = req.body
+    const {
+      name, spec, unit, specQty, specUnit, categoryId, supplierId, price, minStock, maxStock,
+      safetyStock, locationId, remark, code: userCode, batchManaged = true,
+      unitsPerPackage, slotsPerPackage,
+    } = req.body
     if (!name || !unit || !categoryId) {
       error(res, 'Name, unit and category required', 'INVALID_PARAMETER', 400)
       return
@@ -142,6 +179,16 @@ router.post('/', requireMaterialWrite, (req, res) => {
     const normalizedPrice = price === undefined ? 0 : parseFiniteNonNegativeNumber(price)
     if (normalizedPrice === null) {
       error(res, 'Price must be a finite non-negative number', 'INVALID_PARAMETER', 400)
+      return
+    }
+    const normalizedUnitsPerPackage = parseOptionalPositiveNumber(unitsPerPackage)
+    const normalizedSlotsPerPackage = parseOptionalPositiveNumber(slotsPerPackage)
+    if (
+      ![true, false, 0, 1].includes(batchManaged)
+      || (unitsPerPackage !== undefined && normalizedUnitsPerPackage === undefined)
+      || (slotsPerPackage !== undefined && normalizedSlotsPerPackage === undefined)
+    ) {
+      error(res, 'Invalid inventory position configuration', 'INVALID_PARAMETER', 400)
       return
     }
 
@@ -157,13 +204,18 @@ router.post('/', requireMaterialWrite, (req, res) => {
     }
 
     db.prepare(`
-      INSERT INTO materials (id, code, name, spec, unit, spec_qty, spec_unit, category_id, supplier_id, price, min_stock, max_stock, safety_stock, location_id, status, remark)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId, supplierId || null, normalizedPrice, minStock || 0, maxStock || 999999, safetyStock || 0, locationId || null, remark || null)
+      INSERT INTO materials (id, code, name, spec, unit, spec_qty, spec_unit, category_id, supplier_id, price, min_stock, max_stock, safety_stock, location_id, batch_managed, units_per_package, slots_per_package, status, remark)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+    `).run(
+      id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId,
+      supplierId || null, normalizedPrice, minStock || 0, maxStock || 999999,
+      safetyStock || 0, locationId || null, batchManaged === false || batchManaged === 0 ? 0 : 1,
+      normalizedUnitsPerPackage ?? null, normalizedSlotsPerPackage ?? null, remark || null,
+    )
 
     const invId = uuidv4()
-    db.prepare(`INSERT INTO inventory (id, material_id, stock, locked_stock, location_id) VALUES (?, ?, 0, 0, ?)`)
-      .run(invId, id, locationId || null)
+    db.prepare(`INSERT INTO inventory (id, material_id, stock, locked_stock, location_id) VALUES (?, ?, 0, 0, NULL)`)
+      .run(invId, id)
 
     success(res, { id, code: finalCode, name }, 'Created', 201)
   } catch (err: any) {
@@ -207,6 +259,36 @@ router.put('/:id', requireMaterialWrite, (req, res) => {
     if (data.maxStock !== undefined) { fields.push('max_stock = ?'); params.push(data.maxStock) }
     if (data.safetyStock !== undefined) { fields.push('safety_stock = ?'); params.push(data.safetyStock) }
     if (data.locationId !== undefined) { fields.push('location_id = ?'); params.push(data.locationId) }
+    if (data.batchManaged !== undefined) {
+      if (![true, false, 0, 1].includes(data.batchManaged)) {
+        error(res, 'Invalid batch policy', 'INVALID_PARAMETER', 400); return
+      }
+      const next = data.batchManaged === false || data.batchManaged === 0 ? 0 : 1
+      const current = (existing as any).batch_managed
+      if (next !== current) {
+        const facts = db.prepare(`
+          SELECT
+            (SELECT COUNT(*) FROM inventory_positions WHERE material_id = ?) AS positions,
+            (SELECT COUNT(*) FROM batches WHERE material_id = ?) AS batches
+        `).get(id, id) as any
+        if (Number(facts.positions) !== 0 || Number(facts.batches) !== 0) {
+          error(res, 'Batch policy cannot change after inventory facts exist', 'INVENTORY_POLICY_LOCKED', 409); return
+        }
+      }
+      fields.push('batch_managed = ?'); params.push(next)
+    }
+    for (const [input, column] of [
+      ['unitsPerPackage', 'units_per_package'],
+      ['slotsPerPackage', 'slots_per_package'],
+    ] as const) {
+      if (data[input] !== undefined) {
+        const normalized = parseOptionalPositiveNumber(data[input])
+        if (normalized === undefined) {
+          error(res, 'Inventory conversion must be positive or null', 'INVALID_PARAMETER', 400); return
+        }
+        fields.push(`${column} = ?`); params.push(normalized)
+      }
+    }
     if (data.remark !== undefined) { fields.push('remark = ?'); params.push(data.remark) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
 

@@ -22,6 +22,14 @@ export function findMaterialInventoryConflicts(
   `).all(materialId) as Array<{ id: string }>
   for (const row of inventoryRows) refs.push({ kind: 'inventory', id: row.id })
 
+  const positions = db.prepare(`
+    SELECT id FROM inventory_positions
+    WHERE material_id = ? AND (
+      typeof(quantity) NOT IN ('integer', 'real') OR quantity <> 0
+    )
+  `).all(materialId) as Array<{ id: string }>
+  for (const row of positions) refs.push({ kind: 'inventory_position', id: row.id })
+
   const batches = db.prepare(`
     SELECT id FROM batches
     WHERE material_id = ? AND (

@@ -36,7 +36,9 @@ const router = Router()
 // 缺此守卫则任何 outbound:R（只读，如 SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）角色即可越权创建出库
 // （减库存 + 写 batch_usage_tracking/stock_logs）。POST 创建端点此前遗漏、仅 PUT/DELETE 有守卫（相邻授权缺口·2026-07-09）。
 const requireWriteAccess = requirePermission('outbound', 'W')
-const LIVE_OUTBOUND_TYPES = new Set(['direct', 'project', 'transfer', 'scrap'])
+// transfer/scrap have dedicated routes. Keeping them here would leave a second
+// quantity-writing path with different facts and permission semantics.
+const LIVE_OUTBOUND_TYPES = new Set(['direct', 'project'])
 
 function isLiveOutboundType(value: unknown): value is string {
   return typeof value === 'string' && LIVE_OUTBOUND_TYPES.has(value)
@@ -217,6 +219,9 @@ router.post('/', requireWriteAccess, (req, res) => {
       if (!item?.materialId || normalizedQuantity === null) {
         error(res, 'Invalid quantity', 'INVALID_PARAMETER', 400); return
       }
+      if (item.batchId !== undefined && item.batchId !== null && item.batchId !== '') {
+        error(res, 'Batch selection cannot override automatic FEFO', 'FEFO_OVERRIDE_FORBIDDEN', 400); return
+      }
       normalizedItems.push({ ...item, quantity: normalizedQuantity })
     }
 
@@ -237,11 +242,10 @@ router.post('/', requireWriteAccess, (req, res) => {
     // 事务保护：出库涉及 records + items + inventory + batches + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
+      if (idemKey) claimIdempotency(db, idemKey!, idemScope, idemFingerprint, operator)
       const transactionPlan = planInventoryDeductions(db, normalizedItems.map((item, index) => ({
         materialId: item.materialId,
         quantity: item.quantity,
-        pinnedBatchId: item.batchId || null,
         ownerLineId: String(index),
       })))
       const allocatedItems = transactionPlan.allocations.map((allocation) => {
@@ -328,6 +332,18 @@ router.post('/', requireWriteAccess, (req, res) => {
 router.put('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
+    if (req.body?.type !== undefined && !isLiveOutboundType(req.body.type)) {
+      error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
+    }
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (record.type === 'bom') {
+      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
+    }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+    return
+
     const { type, projectId, items: newItems, remark } = req.body
     if ((type !== undefined && !isLiveOutboundType(type)) || !Array.isArray(newItems) || newItems.length === 0) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
@@ -342,13 +358,6 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       normalizedNewItems.push({ ...item, quantity: normalizedQuantity })
     }
 
-    const db = getDatabase()
-    const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
-    if (record.type === 'bom') {
-      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
-    }
-
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + normalizedNewItems.map(() => '?').join(',') + ')').all(...normalizedNewItems.map((i: any) => i.materialId)) as any[]
     const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
     const idemKey = readIdempotencyKey(req)
@@ -360,7 +369,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
+      if (idemKey) claimIdempotency(db, idemKey!, idemScope, idemFingerprint, operator)
       const transactionRecord = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
       if (!transactionRecord) {
         db.exec('ROLLBACK')
@@ -404,7 +413,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         error(res, 'Outbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
         return
       }
-      const newTotalCost = recheckedCosts.totalCost
+      const newTotalCost = recheckedCosts!.totalCost
 
       for (const allocation of restorePlan.allocations) {
         db.prepare(`
@@ -423,7 +432,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         }
       }
 
-      for (const pi of recheckedCosts.items) {
+      for (const pi of recheckedCosts!.items) {
         const itemId = uuidv4()
         pi.allocation.ownerLineId = itemId
         db.prepare(`
@@ -453,7 +462,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         allocations: transactionPlan.allocations,
       })
       responseEnvelope = buildSuccessEnvelope({ id, totalCost: newTotalCost }, 'Outbound updated')
-      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
+      if (idemKey) finalizeIdempotency(db, idemKey!, 200, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')
@@ -474,22 +483,24 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const idemKey = readIdempotencyKey(req)
-    const idemScope = `outbound:delete:${id}`
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
-    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
     if (record.type === 'bom') {
       error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
     }
+    error(res, 'Completed inventory facts require an append-only compensation chain', 'COMPENSATION_CHAIN_REQUIRED', 409)
+    return
 
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = `outbound:delete:${id}`
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const operator = req.body?.operator || 'system'
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
+      if (idemKey) claimIdempotency(db, idemKey!, idemScope, idemFingerprint, operator)
       const lockedRecord = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
       if (!lockedRecord) {
         db.exec('ROLLBACK')
@@ -525,7 +536,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
         markAllocationFactsReversed(db, 'outbound', id)
       }
       responseEnvelope = buildSuccessEnvelope(null, '删除成功，库存已同步回退')
-      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
+      if (idemKey) finalizeIdempotency(db, idemKey!, 200, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')

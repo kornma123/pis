@@ -11,10 +11,12 @@ beforeAll(async () => {
 beforeEach(() => {
   db.exec(`
     DELETE FROM inventory_transaction_allocations;
+    DELETE FROM inventory_positions;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;
     DELETE FROM material_categories;
+    DELETE FROM locations;
   `)
   db.prepare(`
     INSERT INTO material_categories (id, code, name, level)
@@ -23,6 +25,10 @@ beforeEach(() => {
   db.prepare(`
     INSERT INTO materials (id, code, name, unit, category_id)
     VALUES ('SCHEMA-MAT', 'SCHEMA-MAT', 'schema material', 'pcs', 'SCHEMA-CAT')
+  `).run()
+  db.prepare(`
+    INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES ('SCHEMA-LOC', 'SCHEMA-LOC', 'schema location', 'shelf', 'A', 1)
   `).run()
 })
 
@@ -61,12 +67,22 @@ describe('LOC-001 fresh inventory schema constraints', () => {
     insertBatch({ id: 'ALLOC-BATCH', quantity: 1, remaining: 1, status: 1 })
     const insert = db.prepare(`
       INSERT INTO inventory_transaction_allocations
-        (id, operation_kind, owner_id, material_id, batch_id, direction, quantity)
-      VALUES (?, ?, 'OWNER', 'SCHEMA-MAT', 'ALLOC-BATCH', ?, ?)
+        (id, operation_kind, owner_id, material_id, batch_id, location_id, direction, quantity)
+      VALUES (?, ?, 'OWNER', 'SCHEMA-MAT', 'ALLOC-BATCH', 'SCHEMA-LOC', ?, ?)
     `)
     expect(() => insert.run('BAD-DIRECTION', 'outbound', 'sideways', 1)).toThrow(/constraint/i)
     expect(() => insert.run('BAD-QUANTITY', 'outbound', 'out', -1)).toThrow(/constraint/i)
     expect(() => insert.run('BAD-KIND', 'unknown', 'out', 1)).toThrow(/constraint/i)
     expect(() => insert.run('GOOD', 'outbound', 'out', 1)).not.toThrow()
+    expect(() => db.prepare(`
+      INSERT INTO inventory_transaction_allocations
+        (id, operation_kind, owner_id, material_id, batch_id, location_id, direction, quantity)
+      VALUES ('GOOD-NONBATCH', 'return', 'OWNER-NONBATCH', 'SCHEMA-MAT', NULL, 'SCHEMA-LOC', 'in', 1)
+    `).run()).not.toThrow()
+    expect(() => db.prepare(`
+      INSERT INTO inventory_transaction_allocations
+        (id, operation_kind, owner_id, material_id, batch_id, direction, quantity)
+      VALUES ('MISSING-LOCATION', 'outbound', 'OWNER-MISSING', 'SCHEMA-MAT', 'ALLOC-BATCH', 'out', 1)
+    `).run()).toThrow(/constraint/i)
   })
 })

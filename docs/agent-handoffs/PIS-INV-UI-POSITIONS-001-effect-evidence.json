@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "task_id": "PIS-INV-UI-POSITIONS-001",
+  "evidence_kind": "PIS_BUSINESS_EFFECT",
+  "recorded_at_utc": "2026-08-06T07:26:43Z",
+  "would_harness_have_blocked": "UNASSESSED_BY_PIS",
+  "authority": {
+    "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
+    "backend_evidence_head": "3f57931bacfbd2ad1e8b8aa2c678abc089a4e1c1",
+    "ui_product_candidate_sha": "2a78b34852a75091c46af0794da3b57ff19f7c03",
+    "ui_product_candidate_tree": "eb60e1165254a9fae164368dd804453ef969e1fb",
+    "integration_gate_candidate_sha": "aed83f34ef4b75059395e3ef4bce723c64b16e48",
+    "integration_gate_candidate_tree": "65cc11158bd05f1070db143d918de922b6d0bb7d",
+    "mockup_sha256": "2e2b437aea54e6371e7f30dee81c22e26934673164bbb5ff6eb8e3d23b050046"
+  },
+  "product_scope": {
+    "files": [
+      "前端代码/src/pages/inventory/components/InventoryDetailModal.test.tsx",
+      "前端代码/src/pages/inventory/components/InventoryDetailModal.tsx",
+      "前端代码/src/types/index.ts"
+    ],
+    "diff_from_backend_evidence_head": {
+      "files": 3,
+      "insertions": 341,
+      "deletions": 25
+    },
+    "evidence_only_artifact": "docs/agent-handoffs/PIS-INV-UI-POSITIONS-001-effect-evidence.json",
+    "integration_gate_artifacts": {
+      "files": [
+        "前端代码/e2e/impact-map.json",
+        "前端代码/e2e/critical/inventory-positions.spec.ts",
+        "前端代码/e2e/critical/materials.spec.ts"
+      ],
+      "scope_note": "The first two paths add the required critical inventory-position domain and real API-plus-UI coverage. The materials spec change is fixture-only: it replaces the retired completed-inbound delete cleanup expectation with the frozen 409 COMPENSATION_CHAIN_REQUIRED and retained-position assertions.",
+      "product_source_subtrees_unchanged": {
+        "frontend_src_tree": "09c9aa8b6f65efa1a7acbe5b23b37e1859fe5e50",
+        "backend_src_tree": "d7d79df48db5e04a61d73482b559ac98171adf46",
+        "matches_ui_product_candidate": true
+      }
+    }
+  },
+  "review_history": [
+    {
+      "round": "R1",
+      "candidate_sha": "1b6d660d",
+      "verdict": "REQUEST_CHANGES",
+      "findings": [
+        {
+          "severity": "P1",
+          "status": "FIXED_IN_R2",
+          "fact": "0.1 + 0.2 + 0.3 positions were falsely reported as inconsistent with stock 0.6 because comparison used raw binary floating-point totals."
+        },
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
+          "severity": "P2",
+          "status": "ACCEPTED_NON_BLOCKING_FOLLOW_UP",
+          "successor_issue": 141,
+          "fact": "The modal lacks a bounded full-dialog vertical scroll region, Escape close, focus entry, and focus restoration."
+        }
+      ]
+    },
+    {
+      "round": "R2",
+      "candidate_sha": "2a78b34852a75091c46af0794da3b57ff19f7c03",
+      "verdict": "PASS",
+      "facts": [
+        "Quantity comparison and display use exact four-decimal integer units.",
+        "The R1 floating-point P1 is closed.",
+        "P0=0, P1=0, new P2=0; the pre-existing modal lifecycle P2 remains a separately tracked non-blocker."
+      ]
+    }
+  ],
+  "verification": {
+    "focused": [
+      {
+        "command": "npm test -- src/pages/inventory/components/InventoryDetailModal.test.tsx",
+        "result": "PASS",
+        "test_files": 1,
+        "tests": 9,
+        "duration_seconds": 1.23
+      },
+      {
+        "source": "fixed candidate handoff",
+        "result": "PASS",
+        "test_files": 3,
+        "tests": 26
+      }
+    ],
+    "required_e2e": {
+      "planner_red": {
+        "candidate_sha": "1400734927cdce79d3c7347be079a5aa9279bea5",
+        "command": "node scripts/e2e/plan-pr-e2e.cjs --base=origin/master --head=HEAD --format=lines",
+        "result": "FAIL_CLOSED",
+        "fact": "locations-v1.1.ts still matched only legacy-backend, so the required planner rejected the candidate before PR creation."
+      },
+      "planned_suite_red": {
+        "result": "26_PASS_1_FAIL",
+        "fact": "The first nine-spec run exposed a stale materials critical fixture that expected completed inbound DELETE to return 200; the frozen G2 boundary correctly returned 409."
+      },
+      "fix": {
+        "path": "Added an inventory-positions critical domain and a real inbound-to-position-to-modal spec; changed only the stale completed-inbound cleanup path in materials.spec.ts to assert 409 COMPENSATION_CHAIN_REQUIRED, retained position facts, and a still-blocked material delete.",
+        "escaped_prior_author_gates": true
+      },
+      "planner_green": {
+        "command": "node scripts/e2e/plan-pr-e2e.selftest.cjs && node scripts/e2e/plan-pr-e2e.cjs --base=origin/master --head=HEAD --format=summary",
+        "result": "PASS",
+        "changed_files": 39,
+        "critical_domains": 6,
+        "planned_specs": 9
+      },
+      "focused_inventory_position": {
+        "command": "npm run test:e2e -- e2e/critical/inventory-positions.spec.ts",
+        "result": "PASS",
+        "tests": 1,
+        "duration_seconds": 13.0
+      },
+      "focused_material_delete": {
+        "command": "npm run test:e2e -- e2e/critical/materials.spec.ts",
+        "result": "PASS",
+        "tests": 4,
+        "duration_seconds": 10.2
+      },
+      "complete_planned_suite": {
+        "result": "PASS",
+        "spec_files": 9,
+        "tests": 27,
+        "duration_seconds": 47.5,
+        "environment": "Real local frontend and backend against an isolated synthetic SQLite database and Chromium; no persistent or real database was used."
+      },
+      "directed_review_findings": [
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-R3-F1",
+          "severity": "P1",
+          "status": "FIXED",
+          "fact": "The first required E2E assertion proved 409 and material readability but did not directly compare position facts, so a faulty 409 response that also deleted positions could have escaped that E2E.",
+          "fix": "Snapshot stockUnits plus every batchId, locationId, and quantityUnits before completed inbound DELETE; assert the full snapshot is unchanged after the 409 and after the repeated blocked material delete.",
+          "post_fix_result": "Target critical E2E 5/5 PASS in 14.0s; complete planned suite 9 specs / 27 tests PASS in 47.5s.",
+          "residual_boundary": "The assertion uses the public inventory read model against an isolated synthetic database; no real database was accessed."
+        },
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-R3-F2",
+          "severity": "P2",
+          "status": "FIXED",
+          "fact": "The candidate described the modal lifecycle P2 as separately tracked but did not identify the successor Issue in the versioned PIS evidence.",
+          "fix": "Bind finding PIS-INV-UI-POSITIONS-001-F1 to successor Issue #141 in both review history and real-page acceptance evidence.",
+          "post_fix_result": "Evidence JSON parses successfully and contains successor_issue=141 at both F1 evidence points.",
+          "residual_boundary": "Issue #141 remains OPEN and non-blocking; this delivery does not implement the modal lifecycle repair."
+        }
+      ]
+    },
+    "full_frontend": {
+      "command": "TZ=UTC npm test",
+      "result": "PASS",
+      "test_files": 61,
+      "tests": 473,
+      "duration_seconds": 18.47,
+      "environment_note": "An initial run without TZ=UTC produced two unrelated date-format failures because the host timezone was America/Los_Angeles; the unchanged suite passed under the repository's UTC test convention."
+    },
+    "full_backend_integration": {
+      "command": "TZ=UTC NODE_ENV=test JWT_SECRET=<local-test-value> npm run test:node -- --maxWorkers=1 --minWorkers=1",
+      "result": "PASS",
+      "test_files": 156,
+      "tests": 2014,
+      "duration_seconds": 245.28,
+      "note": "This run includes the final pending-inbound completion and completed-inbound compensation-boundary fixes; it does not reuse the earlier backend total."
+    },
+    "build_and_lint": [
+      {
+        "command": "npm run build",
+        "working_area": "frontend",
+        "result": "PASS",
+        "duration_seconds": 7.8
+      },
+      {
+        "command": "npm run lint",
+        "working_area": "frontend",
+        "result": "PASS",
+        "errors": 0,
+        "inherited_warnings": 915
+      },
+      {
+        "command": "npm run build",
+        "working_area": "backend",
+        "result": "PASS"
+      },
+      {
+        "command": "npm run lint",
+        "working_area": "backend",
+        "result": "PASS",
+        "errors": 0,
+        "inherited_warnings": 1427
+      }
+    ],
+    "diff": {
+      "command": "git diff --check origin/master...2a78b34852a75091c46af0794da3b57ff19f7c03",
+      "result": "PASS"
+    }
+  },
+  "real_page_acceptance": {
+    "prior_handoff_status": "UNVERIFIED",
+    "integration_status": "PASS_WITH_ACCEPTED_P2",
+    "environment": "Local frontend and backend with an isolated synthetic SQLite database; no real database or production data was accessed.",
+    "verified_facts": [
+      "The real inventory API returned one batch across 12 positive positions; the modal rendered all 12 rows and an exact 78-unit position total matching stock.",
+      "The real inventory API returned a non-batch material across two positive positions; the modal rendered both rows as non-batch managed and an exact total of 10.",
+      "At 1280x720 and 390x720, the document had no root horizontal overflow and the long position table scrolled internally.",
+      "The browser console had zero errors; only two inherited React Router future warnings were present."
+    ],
+    "accepted_p2": {
+      "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
+      "successor_issue": 141,
+      "fact": "At 1280x720 the dialog bottom was 830px, and at 390x720 it was 1008px; the footer was below the viewport. Escape did not close the dialog and focus was neither moved into nor restored from it.",
+      "why_not_blocking_issue_57": "All position rows, totals, mismatch behavior, and the top close control remained usable. The defect is a cross-cutting modal lifecycle concern outside Issue #57's G1 inventory-truth acceptance criteria and is assigned to a separate P2 non-blocking successor."
+    },
+    "zero_stock_boundary": {
+      "real_page_status": "NOT_REACHABLE_FROM_CURRENT_READ_MODEL",
+      "fact": "A zero-stock material with no positions was not returned by GET /api/v1/inventory, so the modal's zero-stock empty copy could not be exercised on the real page.",
+      "covered_contract": "The supported fail-closed case stock > 0 with positions=[] is covered by the focused component test and renders an explicit unsynchronized-position message.",
+      "release_disposition": "NON_BLOCKING_OUTSIDE_CURRENT_REACHABLE_PATH"
+    }
+  },
+  "boundaries": [
+    "No PM Harness behavior or effectiveness is assessed by this artifact.",
+    "No real database was read, backfilled, or migrated.",
+    "No deployment, release, or production validation was performed.",
+    "G2 general compensation chains remain outside this delivery."
+  ]
+}
