@@ -146,6 +146,16 @@ export interface Location {
 }
 
 // ===== 库存 =====
+// 位置明细：对应后端 GET /api/v1/inventory 返回的 positions[]（inventory-v1.1.ts）。
+// 只含 quantity > 0 的位置，按批次到期先后（FEFO 相关）排序；非批次位置 batchId/batchNo 为 null。
+export interface InventoryPosition {
+  batchId: string | null
+  batchNo: string | null
+  locationId: string
+  locationName: string
+  quantity: number
+}
+
 export interface InventoryItem {
   id: string
   materialId: string
@@ -159,6 +169,7 @@ export interface InventoryItem {
   availableStock: number
   locationId?: string
   locationName?: string
+  positions?: InventoryPosition[]
   supplierId?: string
   supplierName?: string
   status: 'normal' | 'low-stock' | 'warning' | 'expired'
