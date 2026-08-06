@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "PIS-INV-UI-POSITIONS-001",
   "evidence_kind": "PIS_BUSINESS_EFFECT",
-  "recorded_at_utc": "2026-08-06T07:17:06Z",
+  "recorded_at_utc": "2026-08-06T07:26:43Z",
   "would_harness_have_blocked": "UNASSESSED_BY_PIS",
   "authority": {
     "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
@@ -54,6 +54,7 @@
           "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
           "severity": "P2",
           "status": "ACCEPTED_NON_BLOCKING_FOLLOW_UP",
+          "successor_issue": 141,
           "fact": "The modal lacks a bounded full-dialog vertical scroll region, Escape close, focus entry, and focus restoration."
         }
       ]
@@ -123,9 +124,29 @@
         "result": "PASS",
         "spec_files": 9,
         "tests": 27,
-        "duration_seconds": 43.0,
+        "duration_seconds": 47.5,
         "environment": "Real local frontend and backend against an isolated synthetic SQLite database and Chromium; no persistent or real database was used."
-      }
+      },
+      "directed_review_findings": [
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-R3-F1",
+          "severity": "P1",
+          "status": "FIXED",
+          "fact": "The first required E2E assertion proved 409 and material readability but did not directly compare position facts, so a faulty 409 response that also deleted positions could have escaped that E2E.",
+          "fix": "Snapshot stockUnits plus every batchId, locationId, and quantityUnits before completed inbound DELETE; assert the full snapshot is unchanged after the 409 and after the repeated blocked material delete.",
+          "post_fix_result": "Target critical E2E 5/5 PASS in 14.0s; complete planned suite 9 specs / 27 tests PASS in 47.5s.",
+          "residual_boundary": "The assertion uses the public inventory read model against an isolated synthetic database; no real database was accessed."
+        },
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-R3-F2",
+          "severity": "P2",
+          "status": "FIXED",
+          "fact": "The candidate described the modal lifecycle P2 as separately tracked but did not identify the successor Issue in the versioned PIS evidence.",
+          "fix": "Bind finding PIS-INV-UI-POSITIONS-001-F1 to successor Issue #141 in both review history and real-page acceptance evidence.",
+          "post_fix_result": "Evidence JSON parses successfully and contains successor_issue=141 at both F1 evidence points.",
+          "residual_boundary": "Issue #141 remains OPEN and non-blocking; this delivery does not implement the modal lifecycle repair."
+        }
+      ]
     },
     "full_frontend": {
       "command": "TZ=UTC npm test",
@@ -187,6 +208,7 @@
     ],
     "accepted_p2": {
       "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
+      "successor_issue": 141,
       "fact": "At 1280x720 the dialog bottom was 830px, and at 390x720 it was 1008px; the footer was below the viewport. Escape did not close the dialog and focus was neither moved into nor restored from it.",
       "why_not_blocking_issue_57": "All position rows, totals, mismatch behavior, and the top close control remained usable. The defect is a cross-cutting modal lifecycle concern outside Issue #57's G1 inventory-truth acceptance criteria and is assigned to a separate P2 non-blocking successor."
     },

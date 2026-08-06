@@ -14,6 +14,15 @@ type CreatedFixture = {
   materialId: string
 }
 
+type InventoryPositionSnapshot = {
+  stockUnits: number
+  positions: Array<{
+    batchId: string | null
+    locationId: string
+    quantityUnits: number
+  }>
+}
+
 function apiBaseUrl(): string {
   const value = process.env.E2E_API_BASE_URL
   if (!value) throw new Error('E2E_API_BASE_URL must be provided by playwright.config.ts')
@@ -78,6 +87,37 @@ async function materialStatus(
     headers: authorization(token),
   })
   return response.status()
+}
+
+async function inventoryPositionSnapshot(
+  request: APIRequestContext,
+  token: string,
+  materialId: string,
+): Promise<InventoryPositionSnapshot> {
+  const response = await request.get(`${apiBaseUrl()}/inventory?page=1&pageSize=200`, {
+    headers: authorization(token),
+  })
+  const body = await response.json() as {
+    data?: { list?: Array<{
+      materialId?: string
+      stock?: number
+      positions?: Array<{ batchId?: string | null, locationId?: string, quantity?: number }>
+    }> }
+  }
+  expect(response.status(), JSON.stringify(body)).toBe(200)
+  const item = body.data?.list?.find((row) => row.materialId === materialId)
+  expect(item, `inventory returned no material ${materialId}`).toBeTruthy()
+  const positions = (item?.positions ?? []).map((position) => ({
+    batchId: position.batchId ?? null,
+    locationId: String(position.locationId),
+    quantityUnits: Math.round(Number(position.quantity) * 10000),
+  })).sort((left, right) => (
+    `${left.batchId ?? ''}:${left.locationId}`.localeCompare(`${right.batchId ?? ''}:${right.locationId}`)
+  ))
+  return {
+    stockUnits: Math.round(Number(item?.stock) * 10000),
+    positions,
+  }
 }
 
 async function cleanupFixture(
@@ -209,6 +249,9 @@ test.describe('critical material delete guards', () => {
       // Completed inventory facts are immutable until the append-only G2 compensation chain exists.
       // This fixture therefore remains only in Playwright's isolated synthetic database.
       retainCompletedFacts = true
+      const positionBefore = await inventoryPositionSnapshot(request, adminToken, fixture.materialId)
+      expect(positionBefore.stockUnits).toBe(10000)
+      expect(positionBefore.positions).toHaveLength(1)
 
       const denied = await request.delete(`${apiBaseUrl()}/materials/${fixture.materialId}`, {
         headers: authorization(adminToken),
@@ -238,6 +281,8 @@ test.describe('critical material delete guards', () => {
         error: { code: 'CONFLICT' },
       })
       expect(await materialStatus(request, adminToken, fixture.materialId)).toBe(200)
+      expect(await inventoryPositionSnapshot(request, adminToken, fixture.materialId))
+        .toEqual(positionBefore)
     } finally {
       if (!retainCompletedFacts) {
         if (inboundId) {
