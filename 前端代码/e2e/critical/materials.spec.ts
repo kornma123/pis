@@ -175,6 +175,7 @@ test.describe('critical material delete guards', () => {
     let fixture: CreatedFixture | undefined
     let inboundId: string | undefined
     let locationId: string | undefined
+    let retainCompletedFacts = false
     try {
       fixture = await createMaterialFixture(request, adminToken, 'inventory')
       const idSuffix = suffix()
@@ -205,6 +206,9 @@ test.describe('critical material delete guards', () => {
         },
       })
       inboundId = await expectCreatedId(inbound, 'create inbound')
+      // Completed inventory facts are immutable until the append-only G2 compensation chain exists.
+      // This fixture therefore remains only in Playwright's isolated synthetic database.
+      retainCompletedFacts = true
 
       const denied = await request.delete(`${apiBaseUrl()}/materials/${fixture.materialId}`, {
         headers: authorization(adminToken),
@@ -216,24 +220,39 @@ test.describe('critical material delete guards', () => {
       })
       expect(await materialStatus(request, adminToken, fixture.materialId)).toBe(200)
 
-      const removedInbound = await request.delete(`${apiBaseUrl()}/inbound/${inboundId}`, {
+      const deniedInboundDelete = await request.delete(`${apiBaseUrl()}/inbound/${inboundId}`, {
         headers: authorization(adminToken),
       })
-      expect(removedInbound.status()).toBe(200)
-      inboundId = undefined
+      expect(deniedInboundDelete.status()).toBe(409)
+      expect(await deniedInboundDelete.json() as ErrorEnvelope).toMatchObject({
+        success: false,
+        error: { code: 'COMPENSATION_CHAIN_REQUIRED' },
+      })
+
+      const stillDenied = await request.delete(`${apiBaseUrl()}/materials/${fixture.materialId}`, {
+        headers: authorization(adminToken),
+      })
+      expect(stillDenied.status()).toBe(409)
+      expect(await stillDenied.json() as ErrorEnvelope).toMatchObject({
+        success: false,
+        error: { code: 'CONFLICT' },
+      })
+      expect(await materialStatus(request, adminToken, fixture.materialId)).toBe(200)
     } finally {
-      if (inboundId) {
-        const removedInbound = await request.delete(`${apiBaseUrl()}/inbound/${inboundId}`, {
-          headers: authorization(adminToken),
-        })
-        expect(removedInbound.status()).toBe(200)
-      }
-      await cleanupFixture(request, adminToken, fixture)
-      if (locationId) {
-        const location = await request.delete(`${apiBaseUrl()}/locations/${locationId}`, {
-          headers: authorization(adminToken),
-        })
-        expect([200, 404]).toContain(location.status())
+      if (!retainCompletedFacts) {
+        if (inboundId) {
+          const removedInbound = await request.delete(`${apiBaseUrl()}/inbound/${inboundId}`, {
+            headers: authorization(adminToken),
+          })
+          expect(removedInbound.status()).toBe(200)
+        }
+        await cleanupFixture(request, adminToken, fixture)
+        if (locationId) {
+          const location = await request.delete(`${apiBaseUrl()}/locations/${locationId}`, {
+            headers: authorization(adminToken),
+          })
+          expect([200, 404]).toContain(location.status())
+        }
       }
     }
   })
