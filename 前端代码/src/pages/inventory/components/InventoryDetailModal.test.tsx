@@ -98,6 +98,45 @@ describe('InventoryDetailModal — 位置明细（PIS-INV-UI-POSITIONS-001）', 
     expect(screen.getByText('2 个位置，共 16 瓶')).toBeInTheDocument()
   })
 
+  it('合法四位小数不警示：0.1+0.2+0.3 与库存 0.6 在后端精度合同下恒等（R1-P1 反例）', () => {
+    renderModal(makeItem({
+      stock: 0.6,
+      positions: [
+        { batchId: 'B1', batchNo: 'HER2-20260801', locationId: 'L1', locationName: '冷藏库 A-01', quantity: 0.1 },
+        { batchId: 'B2', batchNo: 'HER2-20260715', locationId: 'L2', locationName: '冷藏库 A-03', quantity: 0.2 },
+        { batchId: 'B3', batchNo: 'HER2-20260620', locationId: 'L3', locationName: '备用库 B-02', quantity: 0.3 },
+      ],
+    }))
+
+    // 后端 DECIMAL(18,4) 合同下 0.1+0.2+0.3 恒等于 0.6；JS 浮点 reduce 的
+    // 0.6000000000000001 尾数不得触发误报，界面也不得暴露尾数
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('3 个位置，共 0.6 瓶')).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: '库存位置明细' })
+    for (const q of ['0.1', '0.2', '0.3']) {
+      expect(within(table).getByText(q)).toBeInTheDocument()
+    }
+  })
+
+  it('真实 0.0001 差异仍警示，并如实展示两组四位小数（R1-P1 反例）', () => {
+    renderModal(makeItem({
+      stock: 0.6,
+      positions: [
+        { batchId: 'B1', batchNo: 'HER2-20260801', locationId: 'L1', locationName: '冷藏库 A-01', quantity: 0.1 },
+        { batchId: 'B2', batchNo: 'HER2-20260715', locationId: 'L2', locationName: '冷藏库 A-03', quantity: 0.2 },
+        { batchId: 'B3', batchNo: 'HER2-20260620', locationId: 'L3', locationName: '备用库 B-02', quantity: 0.3001 },
+      ],
+    }))
+
+    // 0.0001 是后端四位小数合同内的真实差异，精度换算不得把它吞掉；
+    // 警示与合计都要显示干净的两组数字，不得带浮点尾数
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('位置合计（0.6001 瓶）与库存数量（0.6 瓶）不符')
+    expect(screen.getByText('3 个位置，共 0.6001 瓶')).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: '库存位置明细' })
+    expect(within(table).getByText('0.3001')).toBeInTheDocument()
+  })
+
   it('库存数量大于 0 但无位置明细时显示诚实空态，不渲染表格', () => {
     renderModal(makeItem({ stock: 18, positions: [] }))
 
