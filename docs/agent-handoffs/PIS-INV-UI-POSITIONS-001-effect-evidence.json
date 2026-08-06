@@ -2,13 +2,15 @@
   "schema_version": 1,
   "task_id": "PIS-INV-UI-POSITIONS-001",
   "evidence_kind": "PIS_BUSINESS_EFFECT",
-  "recorded_at_utc": "2026-08-06T07:00:00Z",
+  "recorded_at_utc": "2026-08-06T07:17:06Z",
   "would_harness_have_blocked": "UNASSESSED_BY_PIS",
   "authority": {
     "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
     "backend_evidence_head": "3f57931bacfbd2ad1e8b8aa2c678abc089a4e1c1",
     "ui_product_candidate_sha": "2a78b34852a75091c46af0794da3b57ff19f7c03",
     "ui_product_candidate_tree": "eb60e1165254a9fae164368dd804453ef969e1fb",
+    "integration_gate_candidate_sha": "aed83f34ef4b75059395e3ef4bce723c64b16e48",
+    "integration_gate_candidate_tree": "65cc11158bd05f1070db143d918de922b6d0bb7d",
     "mockup_sha256": "2e2b437aea54e6371e7f30dee81c22e26934673164bbb5ff6eb8e3d23b050046"
   },
   "product_scope": {
@@ -22,7 +24,20 @@
       "insertions": 341,
       "deletions": 25
     },
-    "evidence_only_artifact": "docs/agent-handoffs/PIS-INV-UI-POSITIONS-001-effect-evidence.json"
+    "evidence_only_artifact": "docs/agent-handoffs/PIS-INV-UI-POSITIONS-001-effect-evidence.json",
+    "integration_gate_artifacts": {
+      "files": [
+        "前端代码/e2e/impact-map.json",
+        "前端代码/e2e/critical/inventory-positions.spec.ts",
+        "前端代码/e2e/critical/materials.spec.ts"
+      ],
+      "scope_note": "The first two paths add the required critical inventory-position domain and real API-plus-UI coverage. The materials spec change is fixture-only: it replaces the retired completed-inbound delete cleanup expectation with the frozen 409 COMPENSATION_CHAIN_REQUIRED and retained-position assertions.",
+      "product_source_subtrees_unchanged": {
+        "frontend_src_tree": "09c9aa8b6f65efa1a7acbe5b23b37e1859fe5e50",
+        "backend_src_tree": "d7d79df48db5e04a61d73482b559ac98171adf46",
+        "matches_ui_product_candidate": true
+      }
+    }
   },
   "review_history": [
     {
@@ -70,6 +85,48 @@
         "tests": 26
       }
     ],
+    "required_e2e": {
+      "planner_red": {
+        "candidate_sha": "1400734927cdce79d3c7347be079a5aa9279bea5",
+        "command": "node scripts/e2e/plan-pr-e2e.cjs --base=origin/master --head=HEAD --format=lines",
+        "result": "FAIL_CLOSED",
+        "fact": "locations-v1.1.ts still matched only legacy-backend, so the required planner rejected the candidate before PR creation."
+      },
+      "planned_suite_red": {
+        "result": "26_PASS_1_FAIL",
+        "fact": "The first nine-spec run exposed a stale materials critical fixture that expected completed inbound DELETE to return 200; the frozen G2 boundary correctly returned 409."
+      },
+      "fix": {
+        "path": "Added an inventory-positions critical domain and a real inbound-to-position-to-modal spec; changed only the stale completed-inbound cleanup path in materials.spec.ts to assert 409 COMPENSATION_CHAIN_REQUIRED, retained position facts, and a still-blocked material delete.",
+        "escaped_prior_author_gates": true
+      },
+      "planner_green": {
+        "command": "node scripts/e2e/plan-pr-e2e.selftest.cjs && node scripts/e2e/plan-pr-e2e.cjs --base=origin/master --head=HEAD --format=summary",
+        "result": "PASS",
+        "changed_files": 39,
+        "critical_domains": 6,
+        "planned_specs": 9
+      },
+      "focused_inventory_position": {
+        "command": "npm run test:e2e -- e2e/critical/inventory-positions.spec.ts",
+        "result": "PASS",
+        "tests": 1,
+        "duration_seconds": 13.0
+      },
+      "focused_material_delete": {
+        "command": "npm run test:e2e -- e2e/critical/materials.spec.ts",
+        "result": "PASS",
+        "tests": 4,
+        "duration_seconds": 10.2
+      },
+      "complete_planned_suite": {
+        "result": "PASS",
+        "spec_files": 9,
+        "tests": 27,
+        "duration_seconds": 43.0,
+        "environment": "Real local frontend and backend against an isolated synthetic SQLite database and Chromium; no persistent or real database was used."
+      }
+    },
     "full_frontend": {
       "command": "TZ=UTC npm test",
       "result": "PASS",
