@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "task_id": "PIS-INV-UI-POSITIONS-001",
+  "evidence_kind": "PIS_BUSINESS_EFFECT",
+  "recorded_at_utc": "2026-08-06T07:00:00Z",
+  "would_harness_have_blocked": "UNASSESSED_BY_PIS",
+  "authority": {
+    "base_sha": "e0cb8083d113ab5c9fc901fc16fb9265cf01243e",
+    "backend_evidence_head": "3f57931bacfbd2ad1e8b8aa2c678abc089a4e1c1",
+    "ui_product_candidate_sha": "2a78b34852a75091c46af0794da3b57ff19f7c03",
+    "ui_product_candidate_tree": "eb60e1165254a9fae164368dd804453ef969e1fb",
+    "mockup_sha256": "2e2b437aea54e6371e7f30dee81c22e26934673164bbb5ff6eb8e3d23b050046"
+  },
+  "product_scope": {
+    "files": [
+      "前端代码/src/pages/inventory/components/InventoryDetailModal.test.tsx",
+      "前端代码/src/pages/inventory/components/InventoryDetailModal.tsx",
+      "前端代码/src/types/index.ts"
+    ],
+    "diff_from_backend_evidence_head": {
+      "files": 3,
+      "insertions": 341,
+      "deletions": 25
+    },
+    "evidence_only_artifact": "docs/agent-handoffs/PIS-INV-UI-POSITIONS-001-effect-evidence.json"
+  },
+  "review_history": [
+    {
+      "round": "R1",
+      "candidate_sha": "1b6d660d",
+      "verdict": "REQUEST_CHANGES",
+      "findings": [
+        {
+          "severity": "P1",
+          "status": "FIXED_IN_R2",
+          "fact": "0.1 + 0.2 + 0.3 positions were falsely reported as inconsistent with stock 0.6 because comparison used raw binary floating-point totals."
+        },
+        {
+          "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
+          "severity": "P2",
+          "status": "ACCEPTED_NON_BLOCKING_FOLLOW_UP",
+          "fact": "The modal lacks a bounded full-dialog vertical scroll region, Escape close, focus entry, and focus restoration."
+        }
+      ]
+    },
+    {
+      "round": "R2",
+      "candidate_sha": "2a78b34852a75091c46af0794da3b57ff19f7c03",
+      "verdict": "PASS",
+      "facts": [
+        "Quantity comparison and display use exact four-decimal integer units.",
+        "The R1 floating-point P1 is closed.",
+        "P0=0, P1=0, new P2=0; the pre-existing modal lifecycle P2 remains a separately tracked non-blocker."
+      ]
+    }
+  ],
+  "verification": {
+    "focused": [
+      {
+        "command": "npm test -- src/pages/inventory/components/InventoryDetailModal.test.tsx",
+        "result": "PASS",
+        "test_files": 1,
+        "tests": 9,
+        "duration_seconds": 1.23
+      },
+      {
+        "source": "fixed candidate handoff",
+        "result": "PASS",
+        "test_files": 3,
+        "tests": 26
+      }
+    ],
+    "full_frontend": {
+      "command": "TZ=UTC npm test",
+      "result": "PASS",
+      "test_files": 61,
+      "tests": 473,
+      "duration_seconds": 18.47,
+      "environment_note": "An initial run without TZ=UTC produced two unrelated date-format failures because the host timezone was America/Los_Angeles; the unchanged suite passed under the repository's UTC test convention."
+    },
+    "full_backend_integration": {
+      "command": "TZ=UTC NODE_ENV=test JWT_SECRET=<local-test-value> npm run test:node -- --maxWorkers=1 --minWorkers=1",
+      "result": "PASS",
+      "test_files": 156,
+      "tests": 2014,
+      "duration_seconds": 245.28,
+      "note": "This run includes the final pending-inbound completion and completed-inbound compensation-boundary fixes; it does not reuse the earlier backend total."
+    },
+    "build_and_lint": [
+      {
+        "command": "npm run build",
+        "working_area": "frontend",
+        "result": "PASS",
+        "duration_seconds": 7.8
+      },
+      {
+        "command": "npm run lint",
+        "working_area": "frontend",
+        "result": "PASS",
+        "errors": 0,
+        "inherited_warnings": 915
+      },
+      {
+        "command": "npm run build",
+        "working_area": "backend",
+        "result": "PASS"
+      },
+      {
+        "command": "npm run lint",
+        "working_area": "backend",
+        "result": "PASS",
+        "errors": 0,
+        "inherited_warnings": 1427
+      }
+    ],
+    "diff": {
+      "command": "git diff --check origin/master...2a78b34852a75091c46af0794da3b57ff19f7c03",
+      "result": "PASS"
+    }
+  },
+  "real_page_acceptance": {
+    "prior_handoff_status": "UNVERIFIED",
+    "integration_status": "PASS_WITH_ACCEPTED_P2",
+    "environment": "Local frontend and backend with an isolated synthetic SQLite database; no real database or production data was accessed.",
+    "verified_facts": [
+      "The real inventory API returned one batch across 12 positive positions; the modal rendered all 12 rows and an exact 78-unit position total matching stock.",
+      "The real inventory API returned a non-batch material across two positive positions; the modal rendered both rows as non-batch managed and an exact total of 10.",
+      "At 1280x720 and 390x720, the document had no root horizontal overflow and the long position table scrolled internally.",
+      "The browser console had zero errors; only two inherited React Router future warnings were present."
+    ],
+    "accepted_p2": {
+      "finding_id": "PIS-INV-UI-POSITIONS-001-F1",
+      "fact": "At 1280x720 the dialog bottom was 830px, and at 390x720 it was 1008px; the footer was below the viewport. Escape did not close the dialog and focus was neither moved into nor restored from it.",
+      "why_not_blocking_issue_57": "All position rows, totals, mismatch behavior, and the top close control remained usable. The defect is a cross-cutting modal lifecycle concern outside Issue #57's G1 inventory-truth acceptance criteria and is assigned to a separate P2 non-blocking successor."
+    },
+    "zero_stock_boundary": {
+      "real_page_status": "NOT_REACHABLE_FROM_CURRENT_READ_MODEL",
+      "fact": "A zero-stock material with no positions was not returned by GET /api/v1/inventory, so the modal's zero-stock empty copy could not be exercised on the real page.",
+      "covered_contract": "The supported fail-closed case stock > 0 with positions=[] is covered by the focused component test and renders an explicit unsynchronized-position message.",
+      "release_disposition": "NON_BLOCKING_OUTSIDE_CURRENT_REACHABLE_PATH"
+    }
+  },
+  "boundaries": [
+    "No PM Harness behavior or effectiveness is assessed by this artifact.",
+    "No real database was read, backfilled, or migrated.",
+    "No deployment, release, or production validation was performed.",
+    "G2 general compensation chains remain outside this delivery."
+  ]
+}
