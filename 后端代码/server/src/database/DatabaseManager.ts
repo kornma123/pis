@@ -1072,7 +1072,7 @@ function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS inventory_transaction_allocations (
       id TEXT PRIMARY KEY,
       operation_kind TEXT NOT NULL
-        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return', 'transfer')),
+        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return', 'transfer', 'stocktaking')),
       owner_id TEXT NOT NULL,
       owner_line_id TEXT,
       material_id TEXT NOT NULL,
@@ -1084,6 +1084,132 @@ function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+}
+
+const MAX_POSITION_VERSION = 9007199254740991
+const MAX_DELETABLE_POSITION_VERSION = MAX_POSITION_VERSION - 2
+
+/**
+ * Durable deletion generation only; this table deliberately stores no quantity.
+ * A delete consumes one generation and recreating the same id consumes another,
+ * so a stale snapshot can never become current again after an ABA cycle.
+ */
+export function ensureInventoryPositionTombstoneSchema(database: DatabaseSync): void {
+  let upgradeError: Error | null = null
+  let transactionStarted = false
+  try {
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS inventory_position_tombstones (
+        position_id TEXT PRIMARY KEY,
+        deleted_version INTEGER NOT NULL
+          CHECK (
+            typeof(deleted_version) = 'integer'
+            AND deleted_version >= 1
+            AND deleted_version <= ${MAX_POSITION_VERSION - 1}
+          ),
+        deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    const invalidPosition = database.prepare(`
+      SELECT id FROM inventory_positions
+      WHERE typeof(version) <> 'integer'
+        OR version < 0
+        OR version > ${MAX_POSITION_VERSION}
+      LIMIT 1
+    `).get() as { id: string } | undefined
+    if (invalidPosition) throw new Error(`position ${invalidPosition.id} has an unsafe version`)
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_insert_guard
+      BEFORE INSERT ON inventory_positions
+      WHEN typeof(NEW.version) <> 'integer'
+        OR NEW.version < 0
+        OR NEW.version > ${MAX_POSITION_VERSION}
+        OR EXISTS (
+          SELECT 1 FROM inventory_position_tombstones t
+          WHERE t.position_id = NEW.id AND NEW.version <= t.deleted_version
+        )
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_version_update_guard
+      BEFORE UPDATE OF version ON inventory_positions
+      WHEN typeof(NEW.version) <> 'integer'
+        OR NEW.version <> OLD.version + 1
+        OR NEW.version > ${MAX_POSITION_VERSION}
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_delete_guard
+      BEFORE DELETE ON inventory_positions
+      WHEN typeof(OLD.version) <> 'integer'
+        OR OLD.version < 0
+        OR OLD.version > ${MAX_DELETABLE_POSITION_VERSION}
+        OR EXISTS (
+          SELECT 1 FROM inventory_position_tombstones t
+          WHERE t.position_id = OLD.id AND t.deleted_version >= OLD.version + 1
+        )
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_after_delete
+      AFTER DELETE ON inventory_positions
+      BEGIN
+        INSERT INTO inventory_position_tombstones (position_id, deleted_version, deleted_at)
+        VALUES (OLD.id, OLD.version + 1, CURRENT_TIMESTAMP)
+        ON CONFLICT(position_id) DO UPDATE SET
+          deleted_version = excluded.deleted_version,
+          deleted_at = excluded.deleted_at;
+      END;
+    `)
+    database.exec('COMMIT')
+    transactionStarted = false
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message : String(caught)
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+        transactionStarted = false
+      } catch (rollbackError) {
+        const rollbackDetail = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        upgradeError = new Error(
+          `INVENTORY_POSITION_TOMBSTONE_SCHEMA_UPGRADE_FAILED: ${detail}; rollback failed: ${rollbackDetail}`,
+        )
+      }
+    }
+    upgradeError ??= new Error(`INVENTORY_POSITION_TOMBSTONE_SCHEMA_UPGRADE_FAILED: ${detail}`)
+  }
+  repinForeignKeysAfterMigration(database, 'inventory-position-tombstone-upgrade', upgradeError)
+  if (upgradeError) throw upgradeError
+}
+
+function ensureStocktakingAllocationKind(database: DatabaseSync): void {
+  const schema = database.prepare(`
+    SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name = 'inventory_transaction_allocations'
+  `).get() as { sql?: string } | undefined
+  if (!schema?.sql || schema.sql.includes("'stocktaking'")) return
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    database.exec('ALTER TABLE inventory_transaction_allocations RENAME TO inventory_transaction_allocations_pre_w1')
+    createCanonicalInventoryAllocationTable(database)
+    database.exec(`
+      INSERT INTO inventory_transaction_allocations
+        (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity, source_allocation_id, created_at)
+      SELECT id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity, source_allocation_id, created_at
+      FROM inventory_transaction_allocations_pre_w1
+    `)
+    database.exec('DROP TABLE inventory_transaction_allocations_pre_w1')
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
 }
 
 /**
@@ -1117,6 +1243,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
       batch_id TEXT,
       location_id TEXT NOT NULL,
       quantity DECIMAL(18, 4) NOT NULL CHECK (${INVENTORY_POSITION_QUANTITY_CHECK}),
+      version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1149,6 +1276,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
       positions INTEGER NOT NULL
     );
   `)
+  ensureDatabaseColumn(database, 'inventory_positions', 'version', 'INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0)')
 
   const allocationColumns = tableColumns(database, 'inventory_transaction_allocations')
   if (allocationColumns.size === 0) {
@@ -1165,6 +1293,8 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
     database.exec('DROP TABLE inventory_transaction_allocations')
     createCanonicalInventoryAllocationTable(database)
   }
+  ensureStocktakingAllocationKind(database)
+  ensureInventoryPositionTombstoneSchema(database)
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner
@@ -3416,6 +3546,111 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   }
 }
 
+function createCanonicalBatchesTable(
+  database: DatabaseSync,
+  tableName: 'batches' | 'batches_w1_rebuild',
+  ifNotExists = false,
+): void {
+  database.exec(`
+    CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}${tableName} (
+      id TEXT PRIMARY KEY,
+      material_id TEXT NOT NULL,
+      batch_no TEXT NOT NULL,
+      quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(quantity) IN ('integer', 'real')
+          AND quantity >= 0
+          AND quantity <= 900719925474.0991
+          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+        ),
+      remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(remaining) IN ('integer', 'real')
+          AND remaining >= 0
+          AND remaining <= 900719925474.0991
+          AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
+        ),
+      production_date TEXT,
+      expiry_date TEXT,
+      inbound_id TEXT NOT NULL,
+      inbound_price DECIMAL(18, 4) DEFAULT 0,
+      supplier_id TEXT,
+      status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
+      UNIQUE(material_id, batch_no)
+    )
+  `)
+}
+
+export function ensureBatchStocktakingSurplusSchema(database: DatabaseSync): void {
+  const schema = database.prepare(`
+    SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'batches'
+  `).get() as { sql?: string } | undefined
+  if (!schema?.sql) {
+    createCanonicalBatchesTable(database, 'batches')
+    return
+  }
+  const expiryColumn = (database.prepare('PRAGMA table_info(batches)').all() as any[])
+    .find(column => column.name === 'expiry_date')
+  const hasHistoricalRemainingCeiling = /CHECK\s*\(\s*remaining\s*<=\s*quantity\s*\)/i.test(schema.sql)
+  if (!hasHistoricalRemainingCeiling && expiryColumn?.notnull !== 1) return
+
+  const preservedObjects = database.prepare(`
+    SELECT type, name, sql FROM sqlite_master
+    WHERE tbl_name = 'batches'
+      AND type IN ('index', 'trigger')
+      AND sql IS NOT NULL
+    ORDER BY CASE type WHEN 'trigger' THEN 0 ELSE 1 END, name
+  `).all() as Array<{ type: 'index' | 'trigger'; name: string; sql: string }>
+  const beforeCount = Number((database.prepare('SELECT COUNT(*) AS count FROM batches').get() as any).count)
+  let upgradeError: Error | null = null
+  let transactionStarted = false
+  try {
+    database.exec('PRAGMA foreign_keys = OFF')
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    if (database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'batches_w1_rebuild'").get()) {
+      throw new Error('temporary rebuild table already exists')
+    }
+    createCanonicalBatchesTable(database, 'batches_w1_rebuild')
+    database.exec(`
+      INSERT INTO batches_w1_rebuild
+        (id, material_id, batch_no, quantity, remaining, production_date, expiry_date,
+         inbound_id, inbound_price, supplier_id, status, created_at, updated_at)
+      SELECT id, material_id, batch_no, quantity, remaining, production_date, expiry_date,
+             inbound_id, inbound_price, supplier_id, status, created_at, updated_at
+      FROM batches
+    `)
+    const copiedCount = Number((database.prepare(
+      'SELECT COUNT(*) AS count FROM batches_w1_rebuild',
+    ).get() as any).count)
+    if (copiedCount !== beforeCount) throw new Error('batch row count changed during rebuild')
+    database.exec('DROP TABLE batches')
+    database.exec('ALTER TABLE batches_w1_rebuild RENAME TO batches')
+    for (const object of preservedObjects) database.exec(object.sql)
+    const violations = database.prepare('PRAGMA foreign_key_check').all()
+    if (violations.length > 0) throw new Error('foreign key validation failed')
+    database.exec('COMMIT')
+    transactionStarted = false
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message : String(caught)
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+        transactionStarted = false
+      } catch (rollbackError) {
+        const rollbackDetail = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        upgradeError = new Error(`BATCH_STOCKTAKING_SCHEMA_UPGRADE_FAILED: ${detail}; rollback failed: ${rollbackDetail}`)
+      }
+    }
+    upgradeError ??= new Error(`BATCH_STOCKTAKING_SCHEMA_UPGRADE_FAILED: ${detail}`)
+  }
+  repinForeignKeysAfterMigration(database, 'batch-stocktaking-surplus-upgrade', upgradeError)
+  if (upgradeError) throw upgradeError
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
   const allowFixtures = allowDefaultFixtureUsers()
@@ -3490,79 +3725,8 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS batches (
-      id TEXT PRIMARY KEY,
-      material_id TEXT NOT NULL,
-      batch_no TEXT NOT NULL,
-      quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
-        CHECK (
-          typeof(quantity) IN ('integer', 'real')
-          AND quantity >= 0
-          AND quantity <= 900719925474.0991
-          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
-        ),
-      remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
-        CHECK (
-          typeof(remaining) IN ('integer', 'real')
-          AND remaining >= 0
-          AND remaining <= 900719925474.0991
-          AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
-        ),
-      production_date TEXT,
-      expiry_date TEXT,
-      inbound_id TEXT NOT NULL,
-      inbound_price DECIMAL(18, 4) DEFAULT 0,
-      supplier_id TEXT,
-      status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (remaining <= quantity),
-      CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
-      UNIQUE(material_id, batch_no)
-    )
-  `)
-
-  // 兼容旧数据库：移除 batches.expiry_date 的 NOT NULL 约束
-  try {
-    const batchCols = database.prepare("PRAGMA table_info(batches)").all() as any[]
-    const expiryCol = batchCols.find(c => c.name === 'expiry_date')
-    if (expiryCol && expiryCol.notnull === 1) {
-      database.exec(`
-        BEGIN TRANSACTION;
-        CREATE TABLE batches_new (
-          id TEXT PRIMARY KEY, material_id TEXT NOT NULL, batch_no TEXT NOT NULL,
-          quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
-            CHECK (
-              typeof(quantity) IN ('integer', 'real')
-              AND quantity >= 0
-              AND quantity <= 900719925474.0991
-              AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
-            ),
-          remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
-            CHECK (
-              typeof(remaining) IN ('integer', 'real')
-              AND remaining >= 0
-              AND remaining <= 900719925474.0991
-              AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
-            ),
-          production_date TEXT, expiry_date TEXT, inbound_id TEXT NOT NULL,
-          inbound_price DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT,
-          status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CHECK (remaining <= quantity),
-          CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
-          UNIQUE(material_id, batch_no)
-        );
-        INSERT INTO batches_new SELECT * FROM batches;
-        DROP TABLE batches;
-        ALTER TABLE batches_new RENAME TO batches;
-        COMMIT;
-      `)
-      console.log('Migrated batches table: removed NOT NULL from expiry_date')
-    }
-  } catch (e: any) { console.error('Migration error for batches:', e.message) }
+  createCanonicalBatchesTable(database, 'batches', true)
+  ensureBatchStocktakingSurplusSchema(database)
   database.exec(`
     CREATE TABLE IF NOT EXISTS inbound_records (id TEXT PRIMARY KEY, inbound_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL, material_id TEXT NOT NULL, batch_id TEXT, batch_no TEXT, quantity DECIMAL(18, 4) NOT NULL, unit TEXT NOT NULL, price DECIMAL(18, 4) DEFAULT 0, amount DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT, location_id TEXT NOT NULL, production_date TEXT, expiry_date TEXT, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, cancel_reason TEXT, purchase_order_id TEXT, purchase_order_no TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
@@ -3696,7 +3860,93 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS operation_logs (id TEXT PRIMARY KEY, user_id TEXT, username TEXT, operation TEXT NOT NULL, description TEXT NOT NULL, request_data TEXT, response_data TEXT, ip TEXT, user_agent TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS stocktaking_records (id TEXT PRIMARY KEY, stocktaking_no TEXT NOT NULL UNIQUE, sheet_no TEXT, material_id TEXT NOT NULL, system_stock DECIMAL(18, 4) NOT NULL, actual_stock DECIMAL(18, 4) NOT NULL, difference DECIMAL(18, 4) NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
+    CREATE TABLE IF NOT EXISTS stocktaking_records (
+      id TEXT PRIMARY KEY,
+      stocktaking_no TEXT NOT NULL UNIQUE,
+      sheet_no TEXT,
+      material_id TEXT NOT NULL,
+      position_id TEXT,
+      batch_id TEXT,
+      location_id TEXT,
+      snapshot_position_version INTEGER,
+      resolution_state TEXT NOT NULL DEFAULT 'legacy',
+      system_stock DECIMAL(18, 4) NOT NULL,
+      actual_stock DECIMAL(18, 4) NOT NULL,
+      difference DECIMAL(18, 4) NOT NULL,
+      operator TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'completed',
+      reason TEXT,
+      remark TEXT,
+      adjustment_event_id TEXT,
+      cancelled_at DATETIME,
+      cancelled_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_deleted INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  ensureDatabaseColumn(database, 'stocktaking_records', 'position_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'batch_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'location_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'snapshot_position_version', 'INTEGER')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'resolution_state', "TEXT NOT NULL DEFAULT 'legacy'")
+  ensureDatabaseColumn(database, 'stocktaking_records', 'reason', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'adjustment_event_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'cancelled_at', 'DATETIME')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'cancelled_by', 'TEXT')
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_position
+      ON stocktaking_records(position_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS stocktaking_adjustment_events (
+      id TEXT PRIMARY KEY,
+      stocktaking_record_id TEXT NOT NULL,
+      event_kind TEXT NOT NULL CHECK (event_kind IN ('adjustment', 'compensation')),
+      parent_event_id TEXT,
+      root_event_id TEXT NOT NULL,
+      chain_depth INTEGER NOT NULL CHECK (chain_depth >= 0),
+      material_id TEXT NOT NULL,
+      position_id TEXT NOT NULL,
+      batch_id TEXT,
+      location_id TEXT NOT NULL,
+      quantity_delta DECIMAL(18, 4) NOT NULL CHECK (
+        typeof(quantity_delta) IN ('integer', 'real')
+        AND quantity_delta <> 0
+        AND abs(quantity_delta) <= 900719925474.0991
+        AND abs(quantity_delta * 10000 - round(quantity_delta * 10000)) < 0.000001
+      ),
+      batch_quantity_delta DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK (
+        typeof(batch_quantity_delta) IN ('integer', 'real')
+        AND abs(batch_quantity_delta) <= 900719925474.0991
+        AND abs(batch_quantity_delta * 10000 - round(batch_quantity_delta * 10000)) < 0.000001
+      ),
+      inventory_before DECIMAL(18, 4) NOT NULL,
+      inventory_after DECIMAL(18, 4) NOT NULL,
+      operator TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_one_adjustment
+      ON stocktaking_adjustment_events(stocktaking_record_id)
+      WHERE event_kind = 'adjustment';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_one_compensation_per_event
+      ON stocktaking_adjustment_events(parent_event_id)
+      WHERE parent_event_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_event_chain
+      ON stocktaking_adjustment_events(root_event_id, chain_depth);
+
+    CREATE TABLE IF NOT EXISTS stocktaking_explanations (
+      id TEXT PRIMARY KEY,
+      stocktaking_record_id TEXT NOT NULL,
+      adjustment_event_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL CHECK (sequence > 0),
+      explanation TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+      operator TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_explanations_record
+      ON stocktaking_explanations(stocktaking_record_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_explanations_sequence
+      ON stocktaking_explanations(stocktaking_record_id, sequence);
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS return_records (id TEXT PRIMARY KEY, return_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, batch_id TEXT, quantity DECIMAL(18, 4) NOT NULL, reason TEXT NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)

@@ -27,6 +27,22 @@ function seedMaterial(id: string, stock: number) {
   }
 }
 
+function exactItem(materialId: string, actualStock: number) {
+  const position = db.prepare(`
+    SELECT id, batch_id, location_id, quantity, version
+    FROM inventory_positions WHERE material_id = ?
+  `).get(materialId) as any
+  return {
+    materialId,
+    positionId: position.id,
+    batchId: position.batch_id,
+    locationId: position.location_id,
+    expectedPositionVersion: Number(position.version),
+    expectedSystemStock: Number(position.quantity),
+    actualStock,
+  }
+}
+
 beforeAll(async () => {
   db = await getDb()
   const stocktakingRoutes = (await import('../src/routes/stocktaking-v1.1.js')).default
@@ -43,7 +59,7 @@ beforeAll(async () => {
 })
 
 describe('LOC-001 batch stocktaking contract', () => {
-  it('rejects a material-only adjustment atomically when any line differs', async () => {
+  it('rejects material-only rows atomically even when their aggregate count matches', async () => {
     const request = (await import('supertest')).default
     const before = {
       records: db.prepare('SELECT COUNT(*) c FROM stocktaking_records').get(),
@@ -53,12 +69,12 @@ describe('LOC-001 batch stocktaking contract', () => {
     }
     const response = await request(app).post('/api/v1/stocktaking/batch').send({
       items: [
-        { materialId: 'MAT-A', actualStock: 90 },
+        { materialId: 'MAT-A', actualStock: 100 },
         { materialId: 'MAT-B', actualStock: 50 },
       ],
     })
     expect(response.status).toBe(422)
-    expect(response.body.error.code).toBe('BATCH_DETAIL_REQUIRED')
+    expect(response.body.error.code).toBe('POSITION_REQUIRED')
     expect({
       records: db.prepare('SELECT COUNT(*) c FROM stocktaking_records').get(),
       stock: db.prepare('SELECT material_id, stock FROM inventory ORDER BY material_id').all(),
@@ -67,21 +83,26 @@ describe('LOC-001 batch stocktaking contract', () => {
     }).toEqual(before)
   })
 
-  it('records an all-zero batch under one sheet without mutating inventory facts', async () => {
+  it('records exact existing positions under one sheet without mutating inventory facts', async () => {
     const request = (await import('supertest')).default
     const response = await request(app).post('/api/v1/stocktaking/batch').send({
       operator: 'wm01',
       items: [
-        { materialId: 'MAT-A', actualStock: 100 },
-        { materialId: 'MAT-B', actualStock: 50 },
-        { materialId: 'MAT-C', actualStock: 30 },
+        exactItem('MAT-A', 100),
+        exactItem('MAT-B', 50),
+        exactItem('MAT-C', 30),
       ],
     })
     expect(response.status).toBe(201)
     const rows = db.prepare('SELECT * FROM stocktaking_records WHERE sheet_no = ? ORDER BY material_id')
       .all(response.body.data.sheetNo) as any[]
     expect(rows).toHaveLength(3)
-    expect(rows.every((row) => row.status === 'completed' && Number(row.difference) === 0)).toBe(true)
+    expect(rows.every((row) => (
+      row.status === 'completed'
+      && row.resolution_state === 'resolved'
+      && typeof row.position_id === 'string'
+      && Number(row.difference) === 0
+    ))).toBe(true)
     expect(db.prepare("SELECT COUNT(*) c FROM stock_logs WHERE related_type = 'stocktaking'").get()).toEqual({ c: 0 })
   })
 
@@ -90,7 +111,7 @@ describe('LOC-001 batch stocktaking contract', () => {
     const before = (db.prepare('SELECT COUNT(*) c FROM stocktaking_records').get() as any).c
     const response = await request(app).post('/api/v1/stocktaking/batch').send({
       items: [
-        { materialId: 'MAT-A', actualStock: 100 },
+        exactItem('MAT-A', 100),
         { materialId: 'MAT-NOPE', actualStock: 10 },
       ],
     })

@@ -31,10 +31,12 @@ describe('partner-P0：schema', () => {
 })
 
 describe('partner-P0：RBAC 模块注册', () => {
-  it('MODULES 含 partners/partner_pricing（共 31）', () => {
+  it('MODULES 含 partners/partner_pricing 与独立盘点权限（共 33）', () => {
     expect(MODULES).toContain('partners')
     expect(MODULES).toContain('partner_pricing')
-    expect(MODULES.length).toBe(31)
+    expect(MODULES).toContain('stocktaking_adjust')
+    expect(MODULES).toContain('stocktaking_reverse')
+    expect(MODULES.length).toBe(33)
   })
   it('种子：lab_director 定价 W；finance 定价 W、客户 R', () => {
     expect(SEED_MATRIX.lab_director.partner_pricing).toBe('W')

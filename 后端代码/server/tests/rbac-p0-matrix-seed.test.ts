@@ -8,9 +8,12 @@ import {
 } from '../src/middleware/permissions.js'
 
 describe('RBAC-P0：SEED_MATRIX 完整性', () => {
-  it('31 个模块', () => {
-    expect(MODULES.length).toBe(31)
-    expect(new Set(MODULES).size).toBe(31) // 无重复
+  it('33 个模块（盘点记录/调整/冲销分别配置）', () => {
+    expect(MODULES.length).toBe(33)
+    expect(new Set(MODULES).size).toBe(33) // 无重复
+    expect(MODULES).toEqual(expect.arrayContaining([
+      'stocktaking', 'stocktaking_adjust', 'stocktaking_reverse',
+    ]))
   })
 
   it('6 个非 admin 角色均有矩阵', () => {
@@ -58,11 +61,18 @@ describe('RBAC-P0：SEED_MATRIX 完整性', () => {
     expect(SEED_MATRIX.lab_director.stocktaking).toBe('W')
     expect(SEED_MATRIX.lab_director.transfers).toBe('W')
     expect(SEED_MATRIX.lab_director.scraps).toBe('W')
+    expect(SEED_MATRIX.lab_director.stocktaking_adjust).toBe('W')
+    expect(SEED_MATRIX.lab_director.stocktaking_reverse).toBe('W')
+    expect(SEED_MATRIX.technician.stocktaking).toBe('W')
+    expect(SEED_MATRIX.technician.stocktaking_adjust).toBeUndefined()
+    expect(SEED_MATRIX.technician.stocktaking_reverse).toBeUndefined()
   })
 
   it('adminAllPermissions = 全模块 W', () => {
     const all = adminAllPermissions()
-    expect(Object.keys(all).length).toBe(31)
+    expect(Object.keys(all).length).toBe(33)
+    expect(all.stocktaking_adjust).toBe('W')
+    expect(all.stocktaking_reverse).toBe('W')
     expect(Object.values(all).every((v) => v === 'W')).toBe(true)
   })
 })
@@ -78,7 +88,10 @@ describe('RBAC-P0：parsePermissions 双形态', () => {
     expect(parsePermissions(['inventory', 'bom'])).toEqual({ inventory: 'W', bom: 'W' })
   })
   it("数组含 '*' → 全 W", () => {
-    expect(Object.keys(parsePermissions(['*'])).length).toBe(31)
+    const all = parsePermissions(['*'])
+    expect(Object.keys(all).length).toBe(33)
+    expect(all.stocktaking_adjust).toBe('W')
+    expect(all.stocktaking_reverse).toBe('W')
   })
   it('空/非法 → {}', () => {
     expect(parsePermissions('')).toEqual({})

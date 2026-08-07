@@ -43,11 +43,13 @@ beforeAll(async () => {
 })
 
 describe('RBAC-P2：getEffectivePermissions 并集（DB 真值）', () => {
-  it('admin → 全 31 模块 W', () => {
+  it('admin → 全 33 模块 W（含独立盘点调整/冲销）', () => {
     const eff = getEffectivePermissions(db, userId('admin'))
-    expect(Object.keys(eff).length).toBe(31)
+    expect(Object.keys(eff).length).toBe(33)
     expect(eff.outbound).toBe('W')
     expect(eff.abc_dashboard).toBe('W')
+    expect(eff.stocktaking_adjust).toBe('W')
+    expect(eff.stocktaking_reverse).toBe('W')
   })
 
   it('单角色 finance → 矩阵一致（成本 W、库存 R、无出库）', () => {

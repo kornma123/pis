@@ -48,7 +48,18 @@ function seedMaterial(stock = 10, batches?: Array<{ id: string; quantity: number
       `).run(`POS-${row.id}`, materialId, row.id, row.remaining)
     }
   }
-  return { materialId, batchId: rows[0]?.id ?? null }
+  const position = db.prepare(`
+    SELECT id, batch_id, location_id, quantity, version
+    FROM inventory_positions WHERE material_id = ? ORDER BY id LIMIT 1
+  `).get(materialId) as any
+  return {
+    materialId,
+    batchId: rows[0]?.id ?? null,
+    positionId: position?.id ?? null,
+    locationId: position?.location_id ?? null,
+    positionQuantity: position ? Number(position.quantity) : null,
+    positionVersion: position ? Number(position.version) : null,
+  }
 }
 
 function snapshot(materialId: string) {
@@ -97,6 +108,7 @@ beforeEach(() => {
     DELETE FROM outbound_records;
     DELETE FROM inbound_records;
     DELETE FROM inventory_positions;
+    DELETE FROM inventory_position_tombstones;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;
@@ -306,16 +318,25 @@ describe('DATA-2 LOC-001 transaction guards', () => {
   })
 
   it('keeps legal zero stocktaking distinct while refusing a material-only nonzero adjustment', async () => {
-    const { materialId } = seedMaterial(10)
-    const zero = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: '10' })
+    const seed = seedMaterial(10)
+    const zero = await request(app).post('/api/v1/stocktaking').send({
+      materialId: seed.materialId,
+      positionId: seed.positionId,
+      batchId: seed.batchId,
+      locationId: seed.locationId,
+      expectedPositionVersion: seed.positionVersion,
+      expectedSystemStock: seed.positionQuantity,
+      actualStock: '10',
+    })
     expect(zero.status).toBe(200)
     expect(zero.body.data.status).toBe('completed')
-    const draft = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 9 })
-    expect(draft.status).toBe(200)
-    const applied = await request(app).post(`/api/v1/stocktaking/${draft.body.data.id}/adjust`).send({ reason: 'physical' })
-    expect(applied.status).toBe(422)
-    expect(applied.body.error.code).toBe('BATCH_DETAIL_REQUIRED')
-    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any).stock).toBe(10)
+    const materialOnly = await request(app).post('/api/v1/stocktaking').send({
+      materialId: seed.materialId,
+      actualStock: 9,
+    })
+    expect(materialOnly.status).toBe(422)
+    expect(materialOnly.body.error.code).toBe('POSITION_REQUIRED')
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(seed.materialId) as any).stock).toBe(10)
   })
 
   it('persists supplier-return FEFO facts and routes delete into G2 compensation', async () => {

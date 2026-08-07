@@ -149,6 +149,8 @@ export interface Location {
 // 位置明细：对应后端 GET /api/v1/inventory 返回的 positions[]（inventory-v1.1.ts）。
 // 只含 quantity > 0 的位置，按批次到期先后（FEFO 相关）排序；非批次位置 batchId/batchNo 为 null。
 export interface InventoryPosition {
+  id: string
+  version: number
   batchId: string | null
   batchNo: string | null
   locationId: string

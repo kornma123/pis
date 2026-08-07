@@ -204,28 +204,6 @@ export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIs
     },
   }))
 
-  const overRemainingBatches = db.prepare(`
-    SELECT b.id, b.batch_no, b.quantity, b.remaining, m.code, m.name
-    FROM batches b
-    JOIN materials m ON m.id = b.material_id AND m.is_deleted = 0
-    WHERE b.status = 1
-      AND COALESCE(b.remaining, 0) - COALESCE(b.quantity, 0) > 0.0001
-  `).all() as any[]
-  overRemainingBatches.forEach(row => addIssue({
-    code: 'BATCH_REMAINING_EXCEEDS_QUANTITY',
-    severity: 'critical',
-    entityType: 'batch',
-    entityId: row.id,
-    entityCode: row.batch_no,
-    entityName: row.name,
-    message: '批次剩余量超过批次数量',
-    impacts: {
-      materialCode: row.code,
-      quantity: Number(row.quantity) || 0,
-      remaining: Number(row.remaining) || 0,
-    },
-  }))
-
   const negativeBatches = db.prepare(`
     SELECT b.id, b.batch_no, b.quantity, b.remaining, m.code, m.name
     FROM batches b

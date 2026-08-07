@@ -10,6 +10,7 @@ export type InventoryOperationKind =
   | 'scrap'
   | 'supplier_return'
   | 'transfer'
+  | 'stocktaking'
 export type InventoryDirection = 'in' | 'out'
 
 export class InventoryTransactionError extends Error {
@@ -83,7 +84,19 @@ type PositionState = {
   batchId: string | null
   locationId: string
   quantityUnits: number
+  version: number
   existed: boolean
+}
+
+export type ExactPositionDeltaInput = {
+  materialId: string
+  positionId: string
+  batchId: string | null
+  locationId: string
+  quantityDelta: unknown
+  batchQuantityDelta?: unknown
+  ownerLineId?: string | null
+  sourceAllocationId?: string | null
 }
 
 type MaterialState = {
@@ -216,7 +229,7 @@ export function inventoryQuantityDelta(left: unknown, right: unknown): number {
 
 function assertBatchState(batch: BatchState): void {
   if (!batch.id || !batch.materialId || !batch.batchNo) corrupt('batch identity is missing')
-  if (batch.quantityUnits < 0 || batch.remainingUnits < 0 || batch.remainingUnits > batch.quantityUnits) {
+  if (batch.quantityUnits < 0 || batch.remainingUnits < 0) {
     corrupt(`batch ${batch.id} violates quantity conservation`)
   }
   if ((batch.remainingUnits === 0 && batch.status !== 0) || (batch.remainingUnits > 0 && batch.status !== 1)) {
@@ -248,7 +261,7 @@ function loadMaterialState(db: any, materialId: string): MaterialState {
     FROM batches WHERE material_id = ? ORDER BY id
   `).all(materialId) as any[]
   const positionRows = db.prepare(`
-    SELECT id, material_id, batch_id, location_id, quantity
+    SELECT id, material_id, batch_id, location_id, quantity, version
     FROM inventory_positions WHERE material_id = ? ORDER BY id
   `).all(materialId) as any[]
 
@@ -269,6 +282,8 @@ function loadMaterialState(db: any, materialId: string): MaterialState {
   const batchById = new Map(batches.map(batch => [batch.id, batch]))
   const positions: PositionState[] = positionRows.map(row => {
     const units = toUnits(row.quantity, `position ${row.id} quantity`, { positive: true })
+    const version = Number(row.version)
+    if (!Number.isSafeInteger(version) || version < 0) corrupt(`position ${row.id} has an invalid version`)
     if (!row.location_id) corrupt(`position ${row.id} has no location`)
     if (material.batch_managed === 1) {
       const batch = batchById.get(row.batch_id)
@@ -282,6 +297,7 @@ function loadMaterialState(db: any, materialId: string): MaterialState {
       batchId: row.batch_id ?? null,
       locationId: row.location_id,
       quantityUnits: units,
+      version,
       existed: true,
     }
   })
@@ -341,6 +357,7 @@ function positionFor(
     batchId,
     locationId,
     quantityUnits: 0,
+    version: 0,
     existed: false,
   }
   state.positions.push(position)
@@ -428,9 +445,6 @@ function addToPosition(
   position.quantityUnits = checkedUnits(position.quantityUnits, quantityUnits)
   if (batch && adjustBatch) {
     batch.remainingUnits = checkedUnits(batch.remainingUnits, quantityUnits)
-    if (batch.remainingUnits > batch.quantityUnits) {
-      throw new InventoryTransactionError('Return exceeds the source batch capacity', 'BATCH_CAPACITY_EXCEEDED', 422)
-    }
     batch.status = 1
     assertBatchState(batch)
   }
@@ -668,6 +682,87 @@ export function planBatchDeltas(db: any, inputs: BatchDeltaInput[]): InventoryPl
   return finalizePlan(db, states, allocations, targets, { operationKind: 'inbound', ownerId })
 }
 
+export function planExactPositionDelta(db: any, input: ExactPositionDeltaInput): InventoryPlan {
+  const state = loadMaterialState(db, input.materialId)
+  const quantityDeltaUnits = toUnits(input.quantityDelta, 'position quantity delta', { allowNegative: true })
+  if (quantityDeltaUnits === 0) {
+    throw new InventoryTransactionError('Position quantity delta must be nonzero', 'INVALID_PARAMETER', 400)
+  }
+  const batchQuantityDeltaUnits = toUnits(
+    input.batchQuantityDelta ?? 0,
+    'batch quantity delta',
+    { allowNegative: true },
+  )
+  const positionById = state.positions.find(position => position.id === input.positionId)
+  const positionByIdentity = state.positions.find(position => (
+    position.batchId === input.batchId && position.locationId === input.locationId
+  ))
+  if (
+    (positionById && (positionById.batchId !== input.batchId || positionById.locationId !== input.locationId))
+    || (positionByIdentity && positionByIdentity.id !== input.positionId)
+  ) {
+    throw new InventoryTransactionError('Position identity does not match', 'POSITION_IDENTITY_MISMATCH', 409)
+  }
+
+  let batch: BatchState | null = null
+  if (state.batchManaged) {
+    if (!input.batchId) throw new InventoryTransactionError('Batch is required for this material', 'BATCH_REQUIRED', 400)
+    batch = state.batches.find(candidate => candidate.id === input.batchId) ?? null
+    if (!batch) throw new InventoryTransactionError('Batch is unavailable', 'BATCH_NOT_FOUND', 422)
+  } else if (input.batchId !== null || batchQuantityDeltaUnits !== 0) {
+    throw new InventoryTransactionError('Non-batch material cannot use a batch', 'BATCH_FORBIDDEN', 400)
+  }
+
+  let position = positionById
+  if (!position) {
+    if (quantityDeltaUnits < 0) {
+      throw new InventoryTransactionError('Position is unavailable', 'POSITION_NOT_FOUND', 409)
+    }
+    const tombstone = db.prepare(`
+      SELECT deleted_version FROM inventory_position_tombstones WHERE position_id = ?
+    `).get(input.positionId) as { deleted_version: unknown } | undefined
+    const deletedVersion = tombstone ? Number(tombstone.deleted_version) : -1
+    const recreatedVersion = deletedVersion + 1
+    if (!Number.isSafeInteger(recreatedVersion) || recreatedVersion < 0) {
+      corrupt('recreated position tombstone is invalid')
+    }
+    position = {
+      id: input.positionId,
+      materialId: input.materialId,
+      batchId: input.batchId,
+      locationId: input.locationId,
+      quantityUnits: 0,
+      version: recreatedVersion,
+      existed: false,
+    }
+    state.positions.push(position)
+  }
+
+  const beforeUnits = stateTotal(state)
+  const nextPositionUnits = checkedUnits(position.quantityUnits, quantityDeltaUnits)
+  if (nextPositionUnits < 0) {
+    throw new InventoryTransactionError('Position balance is insufficient', 'STOCK_INSUFFICIENT', 422)
+  }
+  position.quantityUnits = nextPositionUnits
+  if (batch) {
+    batch.quantityUnits = checkedUnits(batch.quantityUnits, batchQuantityDeltaUnits)
+    batch.remainingUnits = checkedUnits(batch.remainingUnits, quantityDeltaUnits)
+    batch.status = batch.remainingUnits === 0 ? 0 : 1
+    assertBatchState(batch)
+  }
+  state.inventoryUnits = stateTotal(state)
+  const allocation = makeAllocation(
+    state,
+    position,
+    batch,
+    Math.abs(quantityDeltaUnits),
+    quantityDeltaUnits > 0 ? 'in' : 'out',
+    input,
+    beforeUnits,
+  )
+  return finalizePlan(db, new Map([[state.materialId, state]]), [allocation], [])
+}
+
 function recomputeLocationUsed(db: any, locationId: string): void {
   const rows = db.prepare(`
     SELECT p.quantity, m.units_per_package, m.slots_per_package
@@ -730,26 +825,31 @@ export function applyInventoryPlan(db: any, plan: InventoryPlan): void {
 
     for (const position of material.positions) {
       if (position.quantityUnits === 0) {
-        if (position.existed) db.prepare('DELETE FROM inventory_positions WHERE id = ?').run(position.id)
+        if (position.existed) {
+          const result = db.prepare('DELETE FROM inventory_positions WHERE id = ? AND version = ?')
+            .run(position.id, position.version)
+          if (Number(result.changes) !== 1) corrupt(`position ${position.id} changed during apply`)
+        }
         continue
       }
       if (position.existed) {
         const result = db.prepare(`
           UPDATE inventory_positions
-          SET quantity = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND material_id = ? AND location_id = ?
-        `).run(fromUnits(position.quantityUnits), position.id, material.materialId, position.locationId)
+          SET quantity = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND material_id = ? AND location_id = ? AND version = ?
+        `).run(fromUnits(position.quantityUnits), position.id, material.materialId, position.locationId, position.version)
         if (Number(result.changes) !== 1) corrupt(`position ${position.id} disappeared during apply`)
       } else {
         db.prepare(`
-          INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity, version)
+          VALUES (?, ?, ?, ?, ?, ?)
         `).run(
           position.id,
           material.materialId,
           position.batchId,
           position.locationId,
           fromUnits(position.quantityUnits),
+          position.version,
         )
       }
     }

@@ -289,6 +289,25 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     expect(latest.foundationGatesGreen.inventory_conservation).toBe(false)
   })
 
+  it('累计收货量低于盘点后的当前在库量仍是守恒库存，不误报 readiness 失败', async () => {
+    const db = await getDb()
+    seedBalancedInventory(db)
+    db.prepare(`UPDATE batches SET quantity = 10 WHERE id = 'BAT-HCM-READY'`).run()
+
+    const run = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: 'USER-001',
+      triggeredByUsername: 'admin',
+      reasonCode: 'DATA_REPAIR_RECHECK',
+      now: NOW,
+    })
+    expect(run.checks.find((check) => check.key === 'inventory_conservation')).toMatchObject({
+      met: true,
+      status: 'passed',
+      resultCode: 'PASSED',
+      summary: { inventoryTotal: 12, activeBatchTotal: 12, driftRows: 0 },
+    })
+  })
+
   it('库存与活跃批次同时为正无穷时也必须 fail-closed', async () => {
     const db = await getDb()
     seedBalancedInventory(db)

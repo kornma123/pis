@@ -81,7 +81,7 @@ router.get('/', (req, res) => {
       const minStock = Number(row.min_stock) || 0
       const expiry = row.expiry
       const positions = db.prepare(`
-        SELECT p.batch_id, b.batch_no, p.location_id, l.name AS location_name, p.quantity
+        SELECT p.id, p.version, p.batch_id, b.batch_no, p.location_id, l.name AS location_name, p.quantity
         FROM inventory_positions p
         LEFT JOIN batches b ON b.id = p.batch_id
         JOIN locations l ON l.id = p.location_id AND l.is_deleted = 0
@@ -119,6 +119,8 @@ router.get('/', (req, res) => {
         locationId: uniqueLocationIds.length === 1 ? uniqueLocationIds[0] : null,
         locationName: uniqueLocationIds.length === 1 ? positions[0].location_name : '-',
         positions: positions.map(position => ({
+          id: position.id,
+          version: Number(position.version),
           batchId: position.batch_id,
           batchNo: position.batch_no,
           locationId: position.location_id,

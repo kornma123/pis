@@ -13,6 +13,7 @@ beforeAll(async () => {
 beforeEach(() => {
   db.exec(`
     DELETE FROM inventory_positions;
+    DELETE FROM inventory_position_tombstones;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;

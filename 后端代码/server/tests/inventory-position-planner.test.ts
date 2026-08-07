@@ -53,6 +53,7 @@ beforeEach(() => {
     DELETE FROM inventory_capacity_audits;
     DELETE FROM inventory_transaction_allocations;
     DELETE FROM inventory_positions;
+    DELETE FROM inventory_position_tombstones;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;
@@ -130,6 +131,7 @@ describe('PIS-INV-G01 position planner', () => {
   it('moves a real 70/30 split and merges an existing target position without changing caches', () => {
     db.exec(`
       DELETE FROM inventory_positions;
+      DELETE FROM inventory_position_tombstones;
       DELETE FROM batches;
       UPDATE inventory SET stock = 100 WHERE material_id = '${materialId}';
     `)
@@ -163,6 +165,7 @@ describe('PIS-INV-G01 position planner', () => {
   it('keeps non-batch transfers null-batched instead of manufacturing a batch', () => {
     db.exec(`
       DELETE FROM inventory_positions;
+      DELETE FROM inventory_position_tombstones;
       DELETE FROM batches;
       UPDATE materials SET batch_managed = 0 WHERE id = '${materialId}';
       UPDATE inventory SET stock = 10 WHERE material_id = '${materialId}';
@@ -185,6 +188,7 @@ describe('PIS-INV-G01 position planner', () => {
   it('blocks a known over-capacity target but allows and audits missing conversion', () => {
     db.exec(`
       DELETE FROM inventory_positions;
+      DELETE FROM inventory_position_tombstones;
       DELETE FROM batches;
       UPDATE materials SET batch_managed = 0 WHERE id = '${materialId}';
       UPDATE inventory SET stock = 0 WHERE material_id = '${materialId}';

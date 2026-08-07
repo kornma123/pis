@@ -71,6 +71,9 @@ const legacyPermissions: Record<string, 'R' | 'W'> = {
   labor_times: 'W',
   antibody_cost: 'W',
   inventory: 'R',
+  stocktaking: 'W',
+  stocktaking_adjust: 'W',
+  stocktaking_reverse: 'R',
 }
 
 const form: FormData = {
@@ -109,6 +112,9 @@ describe('retired role permission product surfaces', () => {
     expect(normalizeRolePerms(legacyPermissions)).toEqual({
       antibody_cost: 'W',
       inventory: 'R',
+      stocktaking: 'W',
+      stocktaking_adjust: 'W',
+      stocktaking_reverse: 'R',
     })
   })
 
@@ -121,6 +127,9 @@ describe('retired role permission product surfaces', () => {
     expect(result.current.form.permissions).toEqual({
       antibody_cost: 'W',
       inventory: 'R',
+      stocktaking: 'W',
+      stocktaking_adjust: 'W',
+      stocktaking_reverse: 'R',
     })
 
     act(() => {
@@ -140,6 +149,9 @@ describe('retired role permission product surfaces', () => {
         permissions: {
           antibody_cost: 'W',
           inventory: 'R',
+          stocktaking: 'W',
+          stocktaking_adjust: 'W',
+          stocktaking_reverse: 'R',
         },
       }),
     )

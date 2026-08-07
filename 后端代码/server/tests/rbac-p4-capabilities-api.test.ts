@@ -40,10 +40,12 @@ describe('RBAC-P4：登录响应携带能力', () => {
     expect(u.canSeeCost).toBe(false)
   })
 
-  it('admin 登录 → 全 31 模块 W + canSeeCost', async () => {
+  it('admin 登录 → 全 33 模块 W + 独立盘点调整/冲销 + canSeeCost', async () => {
     const body = await login('admin', 'admin123')
     const u = body.data.user
-    expect(Object.keys(u.capabilities).length).toBe(31)
+    expect(Object.keys(u.capabilities).length).toBe(33)
+    expect(u.capabilities.stocktaking_adjust).toBe('W')
+    expect(u.capabilities.stocktaking_reverse).toBe('W')
     expect(u.canSeeCost).toBe(true)
   })
 })

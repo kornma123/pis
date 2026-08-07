@@ -5,7 +5,16 @@ let app: any
 let db: any
 let seq = 0
 
-function seedMaterial(stock: number): string {
+type StocktakingSeed = {
+  materialId: string
+  positionId: string
+  batchId: string
+  locationId: string
+  quantity: number
+  version: number
+}
+
+function seedMaterial(stock: number): StocktakingSeed {
   const id = `MAT-TP-${++seq}`
   db.prepare(`
     INSERT OR IGNORE INTO locations (id, code, name, type, zone, status)
@@ -27,7 +36,30 @@ function seedMaterial(stock: number): string {
       VALUES (?, ?, ?, 'LOC-STOCKTAKING', ?)
     `).run(`P-${id}`, id, `B-${id}`, stock)
   }
-  return id
+  const position = db.prepare(`
+    SELECT id, batch_id, location_id, quantity, version
+    FROM inventory_positions WHERE material_id = ?
+  `).get(id) as any
+  return {
+    materialId: id,
+    positionId: position.id,
+    batchId: position.batch_id,
+    locationId: position.location_id,
+    quantity: Number(position.quantity),
+    version: Number(position.version),
+  }
+}
+
+function stocktakingBody(seed: StocktakingSeed, actualStock: unknown) {
+  return {
+    materialId: seed.materialId,
+    positionId: seed.positionId,
+    batchId: seed.batchId,
+    locationId: seed.locationId,
+    expectedPositionVersion: seed.version,
+    expectedSystemStock: seed.quantity,
+    actualStock,
+  }
 }
 
 function stockOf(materialId: string): number {
@@ -45,68 +77,63 @@ beforeAll(async () => {
 })
 
 describe('LOC-001 stocktaking two-phase contract', () => {
-  it('keeps a nonzero material-only count as a draft with no inventory side effect', async () => {
+  it('keeps a nonzero exact-position count as a draft with no inventory side effect', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(100)
-    const response = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 90 })
+    const seed = seedMaterial(100)
+    const response = await request(app).post('/api/v1/stocktaking').send(stocktakingBody(seed, 90))
     expect(response.status).toBe(200)
     const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ?').get(response.body.data.id) as any
     expect(record.status).toBe('pending')
     expect(Number(record.difference)).toBe(-10)
-    expect(stockOf(materialId)).toBe(100)
-    expect((db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(materialId) as any).remaining).toBe(100)
+    expect(stockOf(seed.materialId)).toBe(100)
+    expect((db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(seed.materialId) as any).remaining).toBe(100)
   })
 
   it('records a legal zero difference as completed', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(50)
-    const response = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 50 })
+    const seed = seedMaterial(50)
+    const response = await request(app).post('/api/v1/stocktaking').send(stocktakingBody(seed, 50))
     expect(response.status).toBe(200)
     expect(response.body.data.status).toBe('completed')
-    expect(stockOf(materialId)).toBe(50)
+    expect(stockOf(seed.materialId)).toBe(50)
   })
 
-  it('fails closed when applying a draft that lacks batch-level truth', async () => {
+  it('rejects a new material-only draft before it can lack batch-level truth', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(100)
-    const created = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 90 })
-    const before = {
-      stock: stockOf(materialId),
-      batch: db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(materialId),
-      logs: db.prepare('SELECT COUNT(*) c FROM stock_logs WHERE related_id = ?').get(created.body.data.id),
-    }
-    const adjusted = await request(app).post(`/api/v1/stocktaking/${created.body.data.id}/adjust`).send({ reason: 'physical' })
-    expect(adjusted.status).toBe(422)
-    expect(adjusted.body.error.code).toBe('BATCH_DETAIL_REQUIRED')
-    expect({
-      stock: stockOf(materialId),
-      batch: db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(materialId),
-      logs: db.prepare('SELECT COUNT(*) c FROM stock_logs WHERE related_id = ?').get(created.body.data.id),
-    }).toEqual(before)
+    const seed = seedMaterial(100)
+    const before = Number((db.prepare('SELECT COUNT(*) AS count FROM stocktaking_records').get() as any).count)
+    const response = await request(app).post('/api/v1/stocktaking').send({
+      materialId: seed.materialId,
+      actualStock: 90,
+    })
+    expect(response.status).toBe(422)
+    expect(response.body.error.code).toBe('POSITION_REQUIRED')
+    expect(Number((db.prepare('SELECT COUNT(*) AS count FROM stocktaking_records').get() as any).count)).toBe(before)
+    expect(stockOf(seed.materialId)).toBe(100)
   })
 
   it('treats a corrupt cache as unknown instead of accepting a stocktaking draft', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(100)
-    db.prepare('UPDATE inventory SET stock = 99 WHERE material_id = ?').run(materialId)
-    const response = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 99 })
+    const seed = seedMaterial(100)
+    db.prepare('UPDATE inventory SET stock = 99 WHERE material_id = ?').run(seed.materialId)
+    const response = await request(app).post('/api/v1/stocktaking').send(stocktakingBody(seed, 99))
     expect(response.status).toBe(409)
     expect(response.body.error.code).toBe('INVENTORY_LEDGER_CORRUPT')
   })
 
   it('soft-deletes a pending draft without touching batch facts', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(100)
-    const created = await request(app).post('/api/v1/stocktaking').send({ materialId, actualStock: 90 })
+    const seed = seedMaterial(100)
+    const created = await request(app).post('/api/v1/stocktaking').send(stocktakingBody(seed, 90))
     const response = await request(app).delete(`/api/v1/stocktaking/${created.body.data.id}`)
     expect(response.status).toBe(200)
-    expect(stockOf(materialId)).toBe(100)
-    expect((db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(materialId) as any).remaining).toBe(100)
+    expect(stockOf(seed.materialId)).toBe(100)
+    expect((db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(seed.materialId) as any).remaining).toBe(100)
   })
 
-  it('refuses to reverse a legacy applied adjustment without an allocation fact', async () => {
+  it('keeps a legacy applied adjustment read-only', async () => {
     const request = (await import('supertest')).default
-    const materialId = seedMaterial(100)
+    const { materialId } = seedMaterial(100)
     const id = `ST-LEGACY-${seq}`
     db.prepare(`
       INSERT INTO stocktaking_records
@@ -115,7 +142,7 @@ describe('LOC-001 stocktaking two-phase contract', () => {
     `).run(id, id, materialId)
     const response = await request(app).delete(`/api/v1/stocktaking/${id}`)
     expect(response.status).toBe(409)
-    expect(response.body.error.code).toBe('ALLOCATION_NOT_FOUND')
+    expect(response.body.error.code).toBe('HISTORICAL_STOCKTAKING_READ_ONLY')
     expect(stockOf(materialId)).toBe(100)
   })
 })

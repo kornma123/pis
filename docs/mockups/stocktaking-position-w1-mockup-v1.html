@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>COREONE · 库位盘点 W1 Mockup v1</title>
+  <style>
+    :root {
+      --blue: #3b82f6;
+      --blue-700: #2563eb;
+      --blue-50: #eff6ff;
+      --ink: #0a2540;
+      --text: #334155;
+      --muted: #64748b;
+      --soft: #94a3b8;
+      --line: #e2e8f0;
+      --surface: #ffffff;
+      --canvas: #f8fafc;
+      --green: #059669;
+      --green-50: #ecfdf5;
+      --amber: #d97706;
+      --amber-50: #fffbeb;
+      --red: #e11d48;
+      --red-50: #fff1f2;
+      --shadow: 0 2px 5px -1px rgba(50, 50, 93, .07), 0 1px 3px -1px rgba(0, 0, 0, .05);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--canvas);
+      font-size: 14px;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, .14);
+    }
+    .hidden { display: none !important; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 248px 1fr; }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; background: var(--surface);
+      border-right: 1px solid var(--line); display: flex; flex-direction: column;
+    }
+    .brand { height: 64px; padding: 0 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 11px; }
+    .brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: var(--blue); color: white; font-weight: 800; }
+    .brand-name { font-weight: 700; color: #111827; letter-spacing: -.02em; }
+    .brand-sub { color: var(--soft); font-size: 11px; margin-top: 1px; }
+    .nav { padding: 14px 10px; flex: 1; overflow: auto; }
+    .nav-title { margin: 15px 12px 6px; color: var(--soft); font-size: 11px; letter-spacing: .08em; }
+    .nav-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; margin: 2px 0; border-radius: 7px; color: #64748b; }
+    .nav-item.active { color: var(--blue); background: var(--blue-50); font-weight: 600; }
+    .nav-icon { width: 20px; text-align: center; font-size: 15px; }
+    .user { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--blue); background: var(--blue-50); font-weight: 700; }
+    .user strong { display: block; color: #111827; font-size: 13px; }
+    .user span { color: var(--soft); font-size: 11px; }
+
+    .workspace { min-width: 0; }
+    .prototype-bar {
+      min-height: 50px; padding: 8px 24px; background: #0f172a; color: white;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .prototype-title { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .draft-pill { border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 4px 9px; color: #bfdbfe; }
+    .dependency-pill { border: 1px solid #92400e; border-radius: 999px; padding: 4px 9px; color: #fde68a; background: rgba(146,64,14,.18); }
+    .dependency-detail { color: #fde68a; font-size: 11px; }
+    .dependency-detail summary { cursor: pointer; border: 1px solid #92400e; border-radius: 999px; padding: 4px 9px; background: rgba(146,64,14,.18); }
+    .dependency-detail[open] { flex-basis: 100%; order: 3; }
+    .dependency-copy { margin-top: 8px; padding: 9px 11px; border: 1px solid #334155; border-radius: 6px; color: #cbd5e1; line-height: 1.6; }
+    .switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .switchers label { color: #94a3b8; font-size: 11px; }
+    .switch {
+      border: 1px solid #334155; color: #cbd5e1; background: #1e293b;
+      padding: 6px 9px; border-radius: 6px; font-size: 11px;
+    }
+    .switch.active { background: var(--blue); border-color: var(--blue); color: white; }
+    .main { max-width: 1500px; margin: 0 auto; padding: 28px 30px 80px; }
+    .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 22px; padding-left: 18px; }
+    h1 { margin: 0; color: var(--ink); font-size: 24px; line-height: 1.3; letter-spacing: -.02em; }
+    .subtitle { color: var(--muted); margin-top: 6px; font-size: 13px; }
+    .head-actions { display: flex; gap: 10px; }
+    .btn { min-height: 38px; border: 1px solid transparent; border-radius: 7px; padding: 0 14px; font-weight: 600; color: var(--text); background: white; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+    .btn.secondary { border-color: #cbd5e1; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .btn.secondary:hover { background: var(--canvas); }
+    .btn.primary { color: white; background: var(--blue); box-shadow: 0 1px 2px rgba(59,130,246,.2); }
+    .btn.primary:hover { background: var(--blue-700); }
+    .btn.danger { color: white; background: var(--red); }
+    .btn.ghost { color: var(--muted); background: transparent; padding: 0 9px; }
+    .btn.small { min-height: 32px; padding: 0 11px; font-size: 12px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .region { position: relative; }
+    .region-tag { position: absolute; z-index: 2; left: -10px; top: -10px; width: 23px; height: 23px; display: grid; place-items: center; background: var(--ink); color: white; border-radius: 50%; font-size: 11px; font-weight: 700; box-shadow: var(--shadow); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .stat { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 17px 18px; box-shadow: var(--shadow); }
+    .stat-value { color: var(--ink); font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .stat-label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .stat-note { color: var(--soft); font-size: 11px; margin-top: 8px; }
+    .card { background: white; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .card-head { min-height: 62px; padding: 13px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .card-title { color: var(--ink); font-weight: 650; }
+    .card-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .control { height: 36px; border: 1px solid #cbd5e1; border-radius: 7px; background: white; color: #334155; padding: 0 10px; font-size: 12px; }
+    input.control { width: 210px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th { text-align: left; background: var(--canvas); color: var(--muted); font-size: 11px; font-weight: 600; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+    td { padding: 13px 14px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+    tbody tr:hover { background: #fafcff; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .num { font-variant-numeric: tabular-nums; text-align: right; }
+    .material { color: var(--ink); font-weight: 600; }
+    .secondary-text { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge.amber { color: var(--amber); background: var(--amber-50); }
+    .badge.green { color: var(--green); background: var(--green-50); }
+    .badge.blue { color: var(--blue-700); background: var(--blue-50); }
+    .badge.gray { color: var(--muted); background: #f1f5f9; }
+    .badge.red { color: var(--red); background: var(--red-50); }
+    .delta.plus { color: var(--green); font-weight: 650; }
+    .delta.minus { color: var(--red); font-weight: 650; }
+    .row-actions { display: flex; align-items: center; gap: 4px; }
+    .link-btn { border: 0; background: transparent; color: var(--blue-700); font-size: 12px; font-weight: 600; padding: 5px 7px; border-radius: 5px; }
+    .link-btn:hover { background: var(--blue-50); }
+    .footer-note { padding: 12px 16px; color: var(--soft); font-size: 11px; border-top: 1px solid var(--line); background: #fcfdff; }
+    .state-panel { padding: 54px 24px; text-align: center; }
+    .state-icon { width: 50px; height: 50px; border-radius: 14px; margin: 0 auto 13px; display: grid; place-items: center; background: var(--blue-50); color: var(--blue); font-size: 22px; }
+    .state-panel h3 { color: var(--ink); margin: 0 0 7px; font-size: 16px; }
+    .state-panel p { color: var(--muted); margin: 0 auto 16px; max-width: 440px; line-height: 1.6; }
+    .state-panel.error .state-icon { color: var(--red); background: var(--red-50); }
+    .state-panel.permission .state-icon { color: var(--amber); background: var(--amber-50); }
+
+    .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(15, 23, 42, .42); display: grid; place-items: center; padding: 24px; }
+    .modal { width: min(840px, 100%); max-height: calc(100vh - 48px); background: white; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,.22); overflow: hidden; display: flex; flex-direction: column; }
+    .modal.small-modal { width: min(560px, 100%); }
+    .modal-head { min-height: 62px; padding: 15px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+    .modal-head strong { color: var(--ink); font-size: 16px; }
+    .close { border: 0; background: transparent; color: var(--soft); font-size: 22px; border-radius: 6px; width: 34px; height: 34px; }
+    .modal-body { padding: 20px; overflow: auto; }
+    .modal-footer { padding: 14px 20px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; }
+    .footer-right { display: flex; gap: 9px; margin-left: auto; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); background: #fcfdff; }
+    .step { padding: 12px 14px; color: var(--soft); text-align: center; font-size: 12px; border-bottom: 2px solid transparent; }
+    .step.active { color: var(--blue-700); border-bottom-color: var(--blue); font-weight: 650; background: white; }
+    .step.done { color: var(--green); }
+    .position-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .position-row { display: grid; grid-template-columns: 34px 1.4fr 1fr 1fr .6fr; gap: 12px; align-items: center; padding: 13px 14px; border-bottom: 1px solid #f1f5f9; }
+    .position-row:last-child { border-bottom: 0; }
+    .position-row.selected { background: var(--blue-50); box-shadow: inset 3px 0 var(--blue); }
+    .radio { width: 17px; height: 17px; border: 1px solid #94a3b8; border-radius: 50%; position: relative; }
+    .selected .radio { border-color: var(--blue); }
+    .selected .radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--blue); }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field label { display: block; color: #475569; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    .field input, .field select, .field textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; background: white; color: #1e293b; padding: 10px 11px; }
+    .field input[readonly] { background: var(--canvas); color: var(--muted); }
+    .field textarea { min-height: 82px; resize: vertical; }
+    .field .hint { margin-top: 5px; color: var(--soft); font-size: 11px; line-height: 1.5; }
+    .full { grid-column: 1 / -1; }
+    .difference-box { margin-top: 16px; padding: 14px 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: var(--blue-50); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .difference-box strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+    .callout { border: 1px solid #fde68a; background: var(--amber-50); color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 12px; line-height: 1.55; }
+    .callout.blue { border-color: #bfdbfe; background: var(--blue-50); color: #1e40af; }
+    .callout.green { border-color: #a7f3d0; background: var(--green-50); color: #065f46; }
+    .summary { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .summary-row { display: flex; justify-content: space-between; gap: 24px; padding: 10px 13px; border-bottom: 1px solid #f1f5f9; }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row span:first-child { color: var(--muted); }
+    .summary-row strong { color: var(--ink); text-align: right; }
+    .timeline { position: relative; margin: 16px 0 0 9px; padding-left: 22px; }
+    .timeline::before { content: ""; position: absolute; left: 3px; top: 8px; bottom: 16px; width: 1px; background: #cbd5e1; }
+    .event { position: relative; padding-bottom: 18px; }
+    .event::before { content: ""; position: absolute; left: -23px; top: 4px; width: 9px; height: 9px; background: white; border: 2px solid var(--blue); border-radius: 50%; }
+    .event.comp::before { border-color: var(--amber); }
+    .event-title { color: var(--ink); font-weight: 650; }
+    .event-meta { color: var(--soft); font-size: 11px; margin-top: 3px; }
+    .event-body { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.55; }
+    .feedback {
+      position: fixed; z-index: 10; right: 20px; bottom: 18px; width: 340px;
+      border: 1px solid #cbd5e1; background: white; border-radius: 12px; box-shadow: 0 18px 40px rgba(15,23,42,.16); overflow: hidden;
+    }
+    .feedback.collapsed .feedback-body { display: none; }
+    .feedback-head { padding: 11px 13px; background: var(--ink); color: white; display: flex; justify-content: space-between; align-items: center; }
+    .feedback-head button { color: white; border: 0; background: transparent; }
+    .feedback-body { padding: 13px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 9px; }
+    .chip { border: 1px solid #cbd5e1; background: white; color: var(--muted); border-radius: 999px; padding: 5px 9px; font-size: 11px; }
+    .chip.selected { border-color: var(--blue); color: var(--blue-700); background: var(--blue-50); }
+    .feedback textarea { width: 100%; min-height: 66px; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; color: #1e293b; background: white; resize: vertical; }
+    .feedback-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; }
+    .toast { position: fixed; z-index: 50; left: 50%; bottom: 28px; transform: translateX(-50%); background: #0f172a; color: white; border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow); font-size: 12px; }
+
+    @media (max-width: 1040px) {
+      .app { grid-template-columns: 76px 1fr; }
+      .brand-copy, .nav-item span, .user-copy { display: none; }
+      .brand { justify-content: center; padding: 0; }
+      .nav-item { justify-content: center; padding-inline: 0; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .app { display: block; }
+      .sidebar { display: none; }
+      .main { padding: 20px 14px 100px; }
+      .page-head { flex-direction: column; }
+      .head-actions { width: 100%; }
+      .head-actions .btn { flex: 1; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .prototype-bar { padding-inline: 12px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      .position-row { grid-template-columns: 28px 1fr; }
+      .position-row > div:nth-child(n+3) { grid-column: 2; }
+      .feedback { left: 12px; right: 12px; bottom: 10px; width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">C</div><div class="brand-copy"><div class="brand-name">COREONE</div><div class="brand-sub">病理实验室耗材管理</div></div></div>
+      <nav class="nav">
+        <div class="nav-item"><span class="nav-icon">⌂</span><span>工作台</span></div>
+        <div class="nav-title">库存作业</div>
+        <div class="nav-item"><span class="nav-icon">▦</span><span>库存列表</span></div>
+        <div class="nav-item"><span class="nav-icon">↓</span><span>入库记录</span></div>
+        <div class="nav-item"><span class="nav-icon">↑</span><span>出库记录</span></div>
+        <div class="nav-item active"><span class="nav-icon">✓</span><span>库存盘点</span></div>
+        <div class="nav-item"><span class="nav-icon">⇄</span><span>库存调拨</span></div>
+        <div class="nav-title">资料与分析</div>
+        <div class="nav-item"><span class="nav-icon">◇</span><span>物料管理</span></div>
+        <div class="nav-item"><span class="nav-icon">▤</span><span>库存报表</span></div>
+      </nav>
+      <div class="user"><div class="avatar">仓</div><div class="user-copy"><strong id="roleLabel">仓库管理员</strong><span id="roleCode">warehouse_manager</span></div></div>
+    </aside>
+
+    <section class="workspace">
+      <div class="prototype-bar">
+        <div class="prototype-title"><span class="draft-pill">Mockup v1 · 未定稿</span><span>仅演示流程，不连接真实数据</span></div>
+        <details class="dependency-detail"><summary>开发依赖</summary><div class="dependency-copy">开发前需补齐：库存位置 ID 与版本、盘点列表筛选与统计、物料/批次/库位名称、盘点详情、操作记录和补充说明查询。这些不是 c74 已有能力。</div></details>
+        <div class="switchers" aria-label="原型状态切换">
+          <label>页面状态</label>
+          <button class="switch active" data-state="normal">有数据</button>
+          <button class="switch" data-state="empty">空态</button>
+          <button class="switch" data-state="error">出错</button>
+          <button class="switch" data-state="permission">无权限</button>
+          <button class="switch" data-state="conflict">库存变化</button>
+          <label>权限视角</label>
+          <button class="switch active" data-role="all">全部权限</button>
+          <button class="switch" data-role="record">仅盘点</button>
+          <button class="switch" data-role="adjust">盘点＋调整</button>
+          <button class="switch" data-role="reverse">盘点＋撤销</button>
+        </div>
+      </div>
+
+      <main class="main">
+        <div class="page-head region">
+          <span class="region-tag">1</span>
+          <div><h1>库存盘点</h1><div class="subtitle">先保存盘点结果，确认差异后再调整库存。每一步都能查到操作人和时间。</div></div>
+          <div class="head-actions"><button class="btn secondary" id="explainFlow">查看盘点流程</button><button class="btn primary" id="startCount">＋ 新建盘点</button></div>
+        </div>
+
+        <div id="normalView">
+          <section class="stats region"><span class="region-tag">2</span>
+            <div class="stat"><div class="stat-value">3</div><div class="stat-label">今日盘点记录</div><div class="stat-note">包含账实相符的记录</div></div>
+            <div class="stat"><div class="stat-value">1</div><div class="stat-label">有差异，待处理</div><div class="stat-note">当前库存还未调整</div></div>
+            <div class="stat"><div class="stat-value">2</div><div class="stat-label">已调整库存</div><div class="stat-note">可查看操作人和时间</div></div>
+            <div class="stat"><div class="stat-value">0</div><div class="stat-label">批次或库位待核实</div><div class="stat-note">需要人工确认</div></div>
+          </section>
+
+          <section class="card region"><span class="region-tag">3</span>
+            <div class="card-head"><div><div class="card-title">盘点记录</div><div class="card-sub">按最新记录排序。“待处理”表示已保存盘点结果，但还没有调整库存。</div></div><div class="filters"><input class="control" placeholder="搜索物料、批次或盘点编号" /><select class="control"><option>全部状态</option><option>待处理</option><option>已调整</option><option>账实相符</option></select><button class="btn secondary small">查询</button></div></div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>盘点编号</th><th>物料 / 位置</th><th>批次</th><th class="num">盘点时系统库存</th><th class="num">实盘数量</th><th class="num">差异</th><th>状态</th><th>盘点人 / 时间</th><th>操作</th></tr></thead>
+              <tbody id="recordRows">
+                <tr data-record="surplus"><td class="mono">ST-20260807-100842</td><td><div class="material">DAB 显色试剂盒</div><div class="secondary-text">冷藏库 A-03-02 · 盒</div></td><td class="mono">DAB-202607-03</td><td class="num">10</td><td class="num">12</td><td class="num"><span class="delta plus">+2</span></td><td><span class="badge amber">● 待处理</span></td><td>王敏<div class="secondary-text">2026-08-07 10:08</div></td><td><div class="row-actions"><button class="link-btn open-detail" data-mode="pending">详情</button><button class="link-btn adjust-action">调整库存</button></div></td></tr>
+                <tr><td class="mono">ST-20260807-094516</td><td><div class="material">载玻片 7101</div><div class="secondary-text">常温库 B-02-01 · 盒</div></td><td><span class="badge gray">非批次管理</span></td><td class="num">48</td><td class="num">48</td><td class="num">0</td><td><span class="badge green">✓ 账实相符</span></td><td>王敏<div class="secondary-text">2026-08-07 09:45</div></td><td><button class="link-btn open-detail" data-mode="equal">详情</button></td></tr>
+                <tr><td class="mono">ST-20260806-164251</td><td><div class="material">苏木素染液</div><div class="secondary-text">常温库 A-01-04 · 瓶</div></td><td class="mono">HE-202605-11</td><td class="num">24</td><td class="num">22</td><td class="num"><span class="delta minus">−2</span></td><td><span class="badge blue">✓ 已调整</span></td><td>陈杰<div class="secondary-text">2026-08-06 16:42</div></td><td><button class="link-btn open-detail" data-mode="adjusted">详情</button></td></tr>
+              </tbody>
+            </table></div>
+            <div class="footer-note">如果找不到对应的批次或库位，请取消本次盘点，并联系管理员补充资料。本页不能新建批次或库位。</div>
+          </section>
+        </div>
+
+        <section id="emptyView" class="card state-panel hidden region"><span class="region-tag">3</span><div class="state-icon">◎</div><h3>还没有盘点记录</h3><p>请选择系统中已有的库存位置开始盘点。即使账实相符，系统也会保存盘点人和时间。</p><button class="btn primary state-start">新建第一笔盘点</button></section>
+        <section id="errorView" class="card state-panel error hidden region"><span class="region-tag">3</span><div class="state-icon">!</div><h3>盘点记录没能加载</h3><p>库存数据未发生变化。请重新加载；如果仍然失败，请联系系统管理员，并说明问题发生的时间。</p><button class="btn secondary" id="retryState">重新加载</button></section>
+        <section id="permissionView" class="card state-panel permission hidden region"><span class="region-tag">3</span><div class="state-icon">⌁</div><h3>你没有查看盘点记录的权限</h3><p>需要“盘点记录”权限才能进入本页。请联系系统管理员为你的岗位配置权限。</p><button class="btn secondary" id="backInventory">返回库存列表</button></section>
+        <section id="conflictView" class="card state-panel error hidden region"><span class="region-tag">3</span><div class="state-icon">↻</div><h3>库存已变化，本次调整未执行</h3><p>盘点后，该库存位置又发生了出库或其他变动。为避免按旧数量调整库存，本次调整未执行。已保存的盘点记录不会丢失。</p><div class="callout" id="conflictSnapshot" style="max-width:620px;margin:0 auto 14px;text-align:left">请先刷新当前库存，再重新盘点。</div><div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap"><button class="btn secondary" id="refreshPosition">刷新当前库存</button><button class="btn primary" id="recountPosition">重新盘点</button></div></section>
+      </main>
+    </section>
+  </div>
+
+  <div class="feedback collapsed" id="feedbackBox">
+    <div class="feedback-head"><strong>快速反馈</strong><button id="toggleFeedback" aria-expanded="false" aria-controls="feedbackBody">展开</button></div>
+    <div class="feedback-body" id="feedbackBody"><div class="chips"><button class="chip" data-chip="整体流程合理">整体流程合理</button><button class="chip" data-chip="信息太多">信息太多</button><button class="chip" data-chip="操作风险太高">操作风险太高</button><button class="chip" data-chip="文案看不懂">文案看不懂</button><button class="chip" data-chip="权限说明有误">权限说明有误</button></div><div class="field" style="margin-bottom:8px"><label>反馈区域</label><select id="feedbackRegion" aria-label="反馈区域"><option value="整体">整体</option><option value="第 1 区：页头与入口">第 1 区：页头与入口</option><option value="第 2 区：状态概览">第 2 区：状态概览</option><option value="第 3 区：记录列表与页面状态">第 3 区：记录列表与页面状态</option><option value="第 4 区：新建盘点">第 4 区：新建盘点</option><option value="第 5 区：详情与操作记录">第 5 区：详情与操作记录</option><option value="第 6 区：调整库存">第 6 区：调整库存</option><option value="第 7 区：撤销调整">第 7 区：撤销调整</option></select></div><textarea id="feedbackText" aria-label="反馈内容" placeholder="只写哪里不对即可（选填）"></textarea><div class="feedback-actions"><button class="btn secondary small" id="copyFeedback">复制反馈</button><button class="btn primary small" id="approveMockup">确认这版原型</button></div></div>
+  </div>
+
+  <div class="overlay hidden" id="countModal" role="dialog" aria-modal="true" aria-labelledby="countTitle">
+    <div class="modal region"><span class="region-tag">4</span>
+      <div class="modal-head"><strong id="countTitle">新建盘点</strong><button class="close close-modal" aria-label="关闭">×</button></div>
+      <div class="steps"><div class="step active" data-step="1">1　选择库存位置</div><div class="step" data-step="2">2　填写实盘数量</div><div class="step" data-step="3">3　确认盘点结果</div></div>
+      <div class="modal-body">
+        <div id="countStep1"><div class="filters" style="margin-bottom:12px"><input class="control" style="width:100%" value="DAB" aria-label="搜索已有库存位置" /></div><div class="callout blue" style="margin-bottom:12px">这里只显示系统中已有的库存位置。如果找不到对应的批次或库位，请取消本次盘点，并联系管理员补充资料。</div><div class="position-list" role="radiogroup" aria-label="已有库存位置"><button class="position-row selected" role="radio" aria-checked="true" style="width:100%;border:0;text-align:left" data-position="dab"><span class="radio"></span><div><div class="material">DAB 显色试剂盒</div><div class="secondary-text mono">IHC-REAG-DAB-001</div></div><div><div class="secondary-text">批次</div><div class="mono">DAB-202607-03</div></div><div><div class="secondary-text">库位</div><div>冷藏库 A-03-02</div></div><div class="num"><div class="secondary-text">当前库存</div><strong id="dabPositionStock">10 盒</strong></div></button><button class="position-row" role="radio" aria-checked="false" style="width:100%;border:0;text-align:left" data-position="slide"><span class="radio"></span><div><div class="material">载玻片 7101</div><div class="secondary-text mono">CON-SLIDE-7101</div></div><div><div class="secondary-text">批次</div><div>非批次管理</div></div><div><div class="secondary-text">库位</div><div>常温库 B-02-01</div></div><div class="num"><div class="secondary-text">当前库存</div><strong id="slidePositionStock">48 盒</strong></div></button></div></div>
+        <div id="countStep2" class="hidden"><div class="form-grid"><div class="field full"><label>盘点位置</label><input readonly id="selectedPosition" aria-label="盘点位置" value="DAB 显色试剂盒 · DAB-202607-03 · 冷藏库 A-03-02" /></div><div class="field"><label>盘点时系统库存</label><input readonly id="systemStock" aria-label="盘点时系统库存" value="10 盒" /></div><div class="field"><label>实盘数量 *</label><input id="actualStock" aria-label="实盘数量" type="number" min="0" step="0.0001" value="12" /><div class="hint">可以填 0，不能小于 0；最多保留 4 位小数。</div></div><div class="field full"><label>盘点备注</label><textarea id="countRemark" aria-label="盘点备注" placeholder="例如：同一货架另外发现 2 盒，未贴入库标签（选填）"></textarea></div></div><div class="difference-box"><div><div class="secondary-text">保存后只记录盘点结果，不会修改库存数量。</div><strong id="differenceText" class="delta plus">盘盈 +2 盒</strong></div><span class="badge amber" id="nextStatus">保存后状态：待处理</span></div></div>
+        <div id="countStep3" class="hidden"><div class="callout" id="countConfirmationCallout" style="margin-bottom:14px"><strong>请再次核对批次和库位。</strong><br />如果选错，差异会记到错误的位置。保存这笔盘点后，系统库存仍为 10 盒；需要另行处理差异后才会调整。</div><div class="summary"><div class="summary-row"><span>物料</span><strong id="confirmMaterial">DAB 显色试剂盒</strong></div><div class="summary-row"><span>批次、库位</span><strong id="confirmPosition">DAB-202607-03 / 冷藏库 A-03-02</strong></div><div class="summary-row"><span>盘点时系统库存 → 实盘数量</span><strong id="confirmQuantity">10 → 12 盒</strong></div><div class="summary-row"><span>差异</span><strong id="confirmDiff" class="delta plus">+2 盒</strong></div><div class="summary-row"><span>盘点人</span><strong>王敏（当前登录用户）</strong></div></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn ghost hidden" id="prevCount">← 上一步</button><div class="footer-right"><button class="btn secondary close-modal">取消</button><button class="btn primary" id="nextCount">下一步</button></div></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal region"><span class="region-tag">5</span><div class="modal-head"><div><strong id="detailTitle">盘点详情</strong><div class="secondary-text mono">ST-20260807-100842</div></div><button class="close close-detail" aria-label="关闭盘点详情">×</button></div><div class="modal-body"><div class="summary"><div class="summary-row"><span>库存位置</span><strong id="detailPosition">DAB 显色试剂盒 · DAB-202607-03 · 冷藏库 A-03-02</strong></div><div class="summary-row"><span>盘点时系统库存 → 实盘数量</span><strong id="detailQuantity">10 → 12 盒（盘盈 +2）</strong></div><div class="summary-row"><span>当前状态</span><strong><span class="badge amber" id="detailStatus">待处理 · 库存未调整</span></strong></div></div><div class="callout blue" id="recordOnlyNotice" style="margin-top:14px">你可以新建盘点，但没有调整库存的权限。这笔盘点已保存，请联系有库存调整权限的人员处理差异。</div><div class="timeline"><div class="event"><div class="event-title">已保存盘点结果</div><div class="event-meta">王敏 · 2026-08-07 10:08</div><div class="event-body" id="countEventBody">盘点时系统库存为 10 盒，实盘数量为 12 盒。系统已保存盘点位置、盘点人和时间。</div></div><div class="event hidden" id="adjustEvent"><div class="event-title">库存已调整 <span id="adjustEventDelta" class="delta plus">+2 盒</span></div><div class="event-meta">王敏 · 2026-08-07 10:12</div><div class="event-body" id="adjustEventBody">当前库存从 10 盒调整为 12 盒。此次只修改库存数量，不会新增入库记录，也不会改变累计入库数量。差异原因：待核实。</div></div><div id="noteEvents"></div><div class="event comp hidden" id="reverseEvent"><div class="event-title">已撤销库存调整 <span id="reverseEventDelta" class="delta minus">−2 盒</span></div><div class="event-meta">王敏 · 2026-08-07 15:05</div><div class="event-body" id="reverseEventBody">系统已新增一笔撤销记录，库存已恢复到调整前。原调整记录仍会保留。</div></div><div class="event hidden" id="restoreEvent"><div class="event-title">原调整已恢复 <span id="restoreEventDelta" class="delta plus">+2 盒</span></div><div class="event-meta">王敏 · 2026-08-07 15:18</div><div class="event-body" id="restoreEventBody">上一次撤销有误，现已恢复原调整，当前库存为 12 盒。所有操作记录均已保留。</div></div></div><div id="noteComposer" class="field hidden"><label>补充说明</label><textarea id="noteText" aria-label="补充说明" placeholder="补充新情况。保存后不会覆盖原原因、数量或操作人。"></textarea><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn secondary small" id="cancelNote">取消</button><button class="btn primary small" id="saveNote">保存说明</button></div></div></div><div class="modal-footer"><button class="btn secondary close-detail">关闭</button><div class="footer-right"><button class="btn secondary hidden" id="appendNote">补充说明</button><button class="btn danger hidden" id="reverseAction">撤销本次调整</button><button class="btn primary" id="detailAdjust">按盘点结果调整库存</button></div></div></div>
+  </div>
+
+  <div class="overlay hidden" id="adjustModal" role="dialog" aria-modal="true" aria-labelledby="adjustTitle">
+      <div class="modal small-modal region"><span class="region-tag">6</span><div class="modal-head"><strong id="adjustTitle">确认库存调整</strong><button class="close close-adjust" aria-label="关闭调整弹窗">×</button></div><div class="modal-body"><div class="callout" id="adjustCallout" style="margin-bottom:14px">确认后，当前库存将从 10 盒调整为 12 盒。此次只修改库存数量，不会新增入库记录，也不会改变累计入库数量。</div><div class="form-grid"><div class="field full"><label>差异原因 *</label><select id="adjustReason" aria-label="差异原因"><option value="pending">待核实</option><option value="missed">此前漏记出库或入库</option><option value="physical">实物摆放或标识问题</option><option value="other">其他</option></select><div class="hint">如果原因还不确定，可先选择“待核实”。提交后只能补充说明，不能修改这次调整。</div></div></div><div class="summary" style="margin-top:14px"><div class="summary-row"><span>当前库存</span><strong id="adjustCurrent">10 盒</strong></div><div class="summary-row"><span>调整后库存</span><strong id="adjustAfter">12 盒</strong></div><div class="summary-row"><span>调整数量</span><strong class="delta plus" id="adjustDelta">+2 盒</strong></div></div><button class="link-btn" id="simulateConflict" style="margin-top:12px">模拟：盘点后又发生了出库</button></div><div class="modal-footer"><button class="btn secondary close-adjust">取消</button><div class="footer-right"><button class="btn primary" id="confirmAdjust">确认调整</button></div></div></div>
+  </div>
+
+  <div class="overlay hidden" id="reverseModal" role="dialog" aria-modal="true" aria-labelledby="reverseTitle">
+    <div class="modal small-modal region"><span class="region-tag">7</span><div class="modal-head"><strong id="reverseTitle">撤销库存调整</strong><button class="close close-reverse" aria-label="关闭撤销弹窗">×</button></div><div class="modal-body"><div class="callout" id="reverseCallout">系统会新增一笔撤销记录，将库存恢复到调整前；原调整记录仍会保留。</div><div class="field" style="margin-top:14px"><label id="reverseReasonLabel">撤销原因 *</label><textarea id="reverseReason" aria-label="撤销原因" placeholder="例如：二次清点后发现，这 2 盒属于另一批次"></textarea></div></div><div class="modal-footer"><button class="btn secondary close-reverse">取消</button><div class="footer-right"><button class="btn danger" id="confirmReverse">确认撤销</button></div></div></div>
+  </div>
+
+  <div class="overlay hidden" id="flowModal" role="dialog" aria-modal="true" aria-labelledby="flowTitle">
+    <div class="modal small-modal"><div class="modal-head"><strong id="flowTitle">盘点流程</strong><button class="close close-flow" aria-label="关闭流程说明">×</button></div><div class="modal-body"><div class="summary"><div class="summary-row"><span>1</span><strong>选择系统中已有的库存位置</strong></div><div class="summary-row"><span>2</span><strong>填写实盘数量；账实相符也会保存记录</strong></div><div class="summary-row"><span>3</span><strong>如果有差异，确认原因后再调整库存</strong></div><div class="summary-row"><span>4</span><strong>如果调整有误，可以撤销；原操作仍会保留</strong></div></div><div class="callout blue" style="margin-top:14px">这里不能新建批次或库位，也不会根据盘点结果推算实际消耗。物料过期后也不会自动报废。</div></div><div class="modal-footer"><div class="footer-right"><button class="btn primary close-flow">知道了</button></div></div></div>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => [...document.querySelectorAll(selector)];
+    let pageState = 'normal';
+    let roleMode = 'all';
+    let countStep = 1;
+    let selectedPosition = 'dab';
+    let detailMode = 'pending';
+    let adjusted = false;
+    let reversed = false;
+    let restored = false;
+    let activeRecord = null;
+    let noteSequence = 0;
+    const focusOrigins = new WeakMap();
+
+    const positions = {
+      dab: { material: 'DAB 显色试剂盒', code: 'IHC-REAG-DAB-001', batch: 'DAB-202607-03', location: '冷藏库 A-03-02', stock: 10, actual: 12, unit: '盒' },
+      slide: { material: '载玻片 7101', code: 'CON-SLIDE-7101', batch: '非批次管理', location: '常温库 B-02-01', stock: 48, actual: 48, unit: '盒' }
+    };
+
+    function showToast(message) {
+      const toast = $('#toast'); toast.textContent = message; toast.classList.remove('hidden');
+      clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.add('hidden'), 2200);
+    }
+    function show(id) {
+      const element = $(id); element.classList.remove('hidden');
+      if (element.classList.contains('overlay')) {
+        const active = document.activeElement;
+        const hiddenParent = active?.closest?.('.overlay.hidden');
+        focusOrigins.set(element, hiddenParent ? (focusOrigins.get(hiddenParent) || active) : active);
+        setTimeout(() => element.querySelector('button, input, select, textarea')?.focus(), 0);
+      }
+    }
+    function hide(id) {
+      const element = $(id); element.classList.add('hidden');
+      const origin = focusOrigins.get(element);
+      if (origin?.isConnected) setTimeout(() => origin.focus(), 0);
+    }
+
+    function setState(next) {
+      pageState = next;
+      $$('[data-state]').forEach(b => { const active = b.dataset.state === next; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
+      ['#normalView','#emptyView','#errorView','#permissionView','#conflictView'].forEach(hide);
+      show(next === 'normal' ? '#normalView' : `#${next}View`);
+      $('#startCount').disabled = next === 'permission';
+    }
+    $$('[data-state]').forEach(b => b.addEventListener('click', () => setState(b.dataset.state)));
+
+    function setRole(next) {
+      roleMode = next;
+      const labels = {
+        all: ['仓库管理员', '可盘点 / 可调整 / 可撤销', '当前权限：可以盘点、调整库存和撤销调整'],
+        record: ['盘点员', '仅可盘点', '当前权限：只能新建盘点'],
+        adjust: ['库存调整员', '可盘点 / 可调整', '当前权限：可以盘点和调整库存，不能撤销调整'],
+        reverse: ['调整审核员', '可盘点 / 可撤销', '当前权限：可以盘点和撤销调整，不能调整库存']
+      };
+      const [name, code, message] = labels[next];
+      $$('[data-role]').forEach(b => { const active = b.dataset.role === next; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
+      $('#roleLabel').textContent = name;
+      $('#roleCode').textContent = code;
+      $$('.adjust-action').forEach(b => { b.style.display = can('adjust') ? '' : 'none'; });
+      showToast(message);
+    }
+    function can(capability) {
+      return roleMode === 'all' || roleMode === capability;
+    }
+    $$('[data-role]').forEach(b => b.addEventListener('click', () => setRole(b.dataset.role)));
+
+    function signedQuantity(value, unit) {
+      return `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value)} ${unit}`;
+    }
+    function syncPositionCards() {
+      $('#dabPositionStock').textContent = `${positions.dab.stock} ${positions.dab.unit}`;
+      $('#slidePositionStock').textContent = `${positions.slide.stock} ${positions.slide.unit}`;
+    }
+    function openCount() { if (pageState === 'permission') return; syncPositionCards(); countStep = 1; updateCountStep(); show('#countModal'); }
+    $('#startCount').addEventListener('click', openCount);
+    $$('.state-start').forEach(b => b.addEventListener('click', openCount));
+    $$('.close-modal').forEach(b => b.addEventListener('click', () => hide('#countModal')));
+    $$('.position-row').forEach(row => row.addEventListener('click', () => {
+      selectedPosition = row.dataset.position;
+      $$('.position-row').forEach(r => { r.classList.toggle('selected', r === row); r.setAttribute('aria-checked', String(r === row)); });
+    }));
+    $('.position-list').addEventListener('keydown', event => {
+      if (!['ArrowDown','ArrowRight','ArrowUp','ArrowLeft'].includes(event.key)) return;
+      event.preventDefault();
+      const rows = $$('.position-row'); const current = rows.findIndex(row => row.getAttribute('aria-checked') === 'true');
+      const offset = ['ArrowDown','ArrowRight'].includes(event.key) ? 1 : -1;
+      const next = rows[(current + offset + rows.length) % rows.length]; next.click(); next.focus();
+    });
+
+    function syncCountData() {
+      const p = positions[selectedPosition];
+      $('#selectedPosition').value = `${p.material} · ${p.batch} · ${p.location}`;
+      $('#systemStock').value = `${p.stock} ${p.unit}`;
+      $('#actualStock').value = p.actual;
+      $('#confirmMaterial').textContent = p.material;
+      $('#confirmPosition').textContent = `${p.batch} / ${p.location}`;
+      $('#countConfirmationCallout').innerHTML = `<strong>请再次核对批次和库位。</strong><br />如果选错，差异会记到错误的位置。保存这笔盘点后，系统库存仍为 ${p.stock} ${p.unit}。之后还需单独处理差异，库存数量才会变化。`;
+      updateDifference();
+    }
+    function updateDifference() {
+      const p = positions[selectedPosition]; const actual = Number($('#actualStock').value); const diff = actual - p.stock;
+      const text = diff === 0 ? `账实相符 0 ${p.unit}` : `${diff > 0 ? '盘盈 +' : '盘亏 −'}${Math.abs(diff)} ${p.unit}`;
+      $('#differenceText').textContent = text; $('#differenceText').className = diff > 0 ? 'delta plus' : diff < 0 ? 'delta minus' : '';
+      $('#nextStatus').textContent = diff === 0 ? '保存后状态：账实相符' : '保存后状态：待处理';
+      $('#confirmQuantity').textContent = `${p.stock} → ${actual} ${p.unit}`;
+      $('#confirmDiff').textContent = diff > 0 ? `+${diff} ${p.unit}` : diff < 0 ? `−${Math.abs(diff)} ${p.unit}` : `0 ${p.unit}`;
+      $('#confirmDiff').className = diff > 0 ? 'delta plus' : diff < 0 ? 'delta minus' : '';
+    }
+    $('#actualStock').addEventListener('input', updateDifference);
+    function updateCountStep() {
+      ['#countStep1','#countStep2','#countStep3'].forEach(hide); show(`#countStep${countStep}`);
+      $$('.step').forEach(s => { const n = Number(s.dataset.step); s.classList.toggle('active', n === countStep); s.classList.toggle('done', n < countStep); });
+      $('#prevCount').classList.toggle('hidden', countStep === 1);
+      $('#nextCount').textContent = countStep === 3 ? '保存盘点记录' : '下一步';
+      if (countStep === 2) syncCountData();
+    }
+    $('#prevCount').addEventListener('click', () => { if (countStep > 1) { countStep--; updateCountStep(); } });
+    $('#nextCount').addEventListener('click', () => {
+      if (countStep === 2 && Number($('#actualStock').value) < 0) { showToast('实盘数量不能为负数'); return; }
+      if (countStep < 3) { countStep++; updateCountStep(); return; }
+      const p = positions[selectedPosition]; const actual = Number($('#actualStock').value);
+      activeRecord = { ...p, actual, difference: actual - p.stock, remark: $('#countRemark').value.trim() };
+      $('#countRemark').value = '';
+      hide('#countModal'); showToast(activeRecord.difference === 0 ? '盘点已保存，账实相符' : '盘点已保存，当前库存未调整');
+      openDetail(activeRecord.difference === 0 ? 'equal' : 'pending', true);
+    });
+
+    function openDetail(mode = 'pending', resetChain = true) {
+      detailMode = mode;
+      if (resetChain) { adjusted = mode === 'adjusted'; reversed = false; restored = false; }
+      const isEqual = mode === 'equal';
+      const p = activeRecord || (isEqual ? { ...positions.slide, difference: 0 } : { ...positions.dab, difference: 2 });
+      const actual = p.actual ?? (p.stock + p.difference);
+      const signed = p.difference > 0 ? `+${p.difference}` : p.difference < 0 ? `−${Math.abs(p.difference)}` : '0';
+      const reverseSigned = p.difference > 0 ? `−${p.difference}` : p.difference < 0 ? `+${Math.abs(p.difference)}` : '0';
+      $('#detailPosition').textContent = `${p.material} · ${p.batch} · ${p.location}`;
+      $('#detailQuantity').textContent = `${p.stock} → ${actual} ${p.unit}（${p.difference > 0 ? `盘盈 ${signed} ${p.unit}` : p.difference < 0 ? `盘亏 ${signed} ${p.unit}` : '账实相符'}）`;
+      $('#countEventBody').textContent = `盘点时系统库存为 ${p.stock} ${p.unit}，实盘数量为 ${actual} ${p.unit}。系统已保存盘点位置、盘点人和时间。${p.remark ? ` 盘点备注：${p.remark}` : ''}`;
+      $('#adjustEventDelta').textContent = `${signed} ${p.unit}`;
+      $('#adjustEventDelta').className = p.difference >= 0 ? 'delta plus' : 'delta minus';
+      $('#adjustEventBody').textContent = `当前库存从 ${p.stock} ${p.unit}调整为 ${actual} ${p.unit}。此次只修改库存数量，不会新增入库记录，也不会改变累计入库数量。差异原因：${p.adjustReason || '待核实'}。`;
+      $('#reverseEventDelta').textContent = `${reverseSigned} ${p.unit}`;
+      $('#reverseEventDelta').className = p.difference > 0 ? 'delta minus' : 'delta plus';
+      $('#restoreEventDelta').textContent = `${signed} ${p.unit}`;
+      $('#restoreEventDelta').className = p.difference >= 0 ? 'delta plus' : 'delta minus';
+      $('#detailStatus').textContent = isEqual ? '账实相符' : restored ? `原调整已恢复 · 当前库存 ${actual} ${p.unit}` : reversed ? `已撤销调整 · 当前库存 ${p.stock} ${p.unit}` : adjusted ? `已调整 · 当前库存 ${actual} ${p.unit}` : '待处理 · 库存未调整';
+      $('#detailStatus').className = `badge ${isEqual || adjusted ? 'green' : 'amber'}`;
+      $('#recordOnlyNotice').classList.toggle('hidden', can('adjust') || isEqual || adjusted);
+      $('#detailAdjust').classList.toggle('hidden', isEqual || adjusted || !can('adjust'));
+      $('#adjustEvent').classList.toggle('hidden', !adjusted);
+      $('#appendNote').classList.toggle('hidden', !adjusted || !can('adjust'));
+      $('#reverseAction').classList.toggle('hidden', !adjusted || !can('reverse') || restored);
+      $('#reverseAction').textContent = reversed ? '恢复原调整' : '撤销本次调整';
+      $('#noteComposer').classList.add('hidden');
+      if (resetChain) { $('#noteEvents').replaceChildren(); noteSequence = 0; }
+      $('#reverseEvent').classList.toggle('hidden', !reversed);
+      $('#restoreEvent').classList.toggle('hidden', !restored);
+      show('#detailModal');
+    }
+    $$('.open-detail').forEach(b => { b.addEventListener('click', () => {
+      activeRecord = b.dataset.mode === 'equal'
+        ? { ...positions.slide, difference: 0 }
+        : b.dataset.mode === 'adjusted'
+          ? { material: '苏木素染液', batch: 'HE-202605-11', location: '常温库 A-01-04', stock: 24, actual: 22, difference: -2, unit: '瓶' }
+          : { ...positions.dab, stock: 10, actual: 12, difference: 2 };
+      openDetail(b.dataset.mode, true);
+    }); });
+    function openAdjustModal() {
+      const p = activeRecord;
+      const actual = p.actual ?? (p.stock + p.difference);
+      $('#adjustCallout').textContent = `确认后，当前库存将从 ${p.stock} ${p.unit}调整为 ${actual} ${p.unit}。此次只修改库存数量，不会新增入库记录，也不会改变累计入库数量。`;
+      $('#adjustCurrent').textContent = `${p.stock} ${p.unit}`;
+      $('#adjustAfter').textContent = `${actual} ${p.unit}`;
+      $('#adjustDelta').textContent = signedQuantity(p.difference, p.unit);
+      $('#adjustDelta').className = p.difference >= 0 ? 'delta plus' : 'delta minus';
+      show('#adjustModal');
+    }
+    $$('.adjust-action').forEach(b => b.addEventListener('click', () => { activeRecord = { ...positions.dab, stock: 10, actual: 12, difference: 2 }; openAdjustModal(); }));
+    $$('.close-detail').forEach(b => b.addEventListener('click', () => hide('#detailModal')));
+    $('#detailAdjust').addEventListener('click', () => { hide('#detailModal'); openAdjustModal(); });
+    $$('.close-adjust').forEach(b => b.addEventListener('click', () => hide('#adjustModal')));
+    $('#confirmAdjust').addEventListener('click', () => {
+      activeRecord.adjustReason = $('#adjustReason').selectedOptions[0].textContent;
+      const actual = activeRecord.actual ?? (activeRecord.stock + activeRecord.difference);
+      adjusted = true; reversed = false; restored = false; hide('#adjustModal'); showToast(`库存已调整为 ${actual} ${activeRecord.unit}，原盘点记录已保留`); openDetail('adjusted', false);
+    });
+    $('#appendNote').addEventListener('click', () => { $('#noteComposer').classList.remove('hidden'); $('#noteText').focus(); });
+    $('#cancelNote').addEventListener('click', () => $('#noteComposer').classList.add('hidden'));
+    $('#saveNote').addEventListener('click', () => {
+      const note = $('#noteText').value.trim();
+      if (!note) { showToast('请填写补充说明'); return; }
+      noteSequence += 1;
+      const event = document.createElement('div'); event.className = 'event';
+      const title = document.createElement('div'); title.className = 'event-title'; title.textContent = '补充说明';
+      const meta = document.createElement('div'); meta.className = 'event-meta'; meta.textContent = `王敏 · 2026-08-07 14:${String(18 + noteSequence * 2).padStart(2, '0')}`;
+      const noteSentence = /[。！？!?]$/.test(note) ? note : `${note}。`;
+      const body = document.createElement('div'); body.className = 'event-body'; body.textContent = `${noteSentence} 原调整记录未更改。`;
+      event.append(title, meta, body); $('#noteEvents').append(event);
+      $('#noteText').value = ''; $('#noteComposer').classList.add('hidden'); showToast('补充说明已保存，原调整记录未修改');
+    });
+    $('#simulateConflict').addEventListener('click', () => { hide('#adjustModal'); $('#conflictSnapshot').textContent = '请先刷新当前库存，再重新盘点。'; setState('conflict'); showToast('库存已变化，本次调整未执行'); });
+    $('#refreshPosition').addEventListener('click', () => { positions.dab.stock = 9; syncPositionCards(); $('#conflictSnapshot').textContent = '已刷新：当前库存为 9 盒。原盘点记录（10 → 12）仍会保留，但已不能作为本次库存调整的依据；请重新盘点。'; showToast('已刷新：当前库存为 9 盒'); });
+    $('#recountPosition').addEventListener('click', () => { setState('normal'); positions.dab.stock = 9; positions.dab.actual = 12; openCount(); });
+    $('#reverseAction').addEventListener('click', () => {
+      hide('#detailModal');
+      $('#reverseReason').value = '';
+      const p = activeRecord; const actual = p.actual ?? (p.stock + p.difference);
+      const adjustment = signedQuantity(p.difference, p.unit); const compensation = signedQuantity(-p.difference, p.unit);
+      $('#reverseTitle').textContent = reversed ? '恢复原调整' : '撤销库存调整';
+      $('#reverseReasonLabel').textContent = reversed ? '恢复原因 *' : '撤销原因 *';
+      $('#reverseReason').setAttribute('aria-label', reversed ? '恢复原因' : '撤销原因');
+      $('#reverseReason').placeholder = reversed ? '例如：刚才选错了批次，需要恢复原调整' : '例如：二次清点后发现，这些物料属于另一批次';
+      $('#reverseCallout').textContent = reversed
+        ? `确认后，系统会新增一笔恢复记录（库存 ${adjustment}），将库存恢复为 ${actual} ${p.unit}。之前的操作记录不会删除。`
+        : `系统会新增一笔撤销记录（库存 ${compensation}），将库存恢复到调整前；原调整记录仍会保留。`;
+      $('#confirmReverse').textContent = reversed ? '确认恢复' : '确认撤销';
+      show('#reverseModal');
+    });
+    $$('.close-reverse').forEach(b => b.addEventListener('click', () => hide('#reverseModal')));
+    $('#confirmReverse').addEventListener('click', () => {
+      const reverseReason = $('#reverseReason').value.trim();
+      if (!reverseReason) { showToast(reversed ? '请填写恢复原因' : '请填写撤销原因'); return; }
+      if (!reversed) {
+        $('#reverseEventBody').textContent = `系统已新增一笔撤销记录，库存已恢复到调整前。原调整记录仍会保留。撤销原因：${reverseReason}。`;
+        reversed = true; restored = false; hide('#reverseModal'); openDetail('adjusted', false); showToast('这次调整已撤销，原操作记录仍保留');
+      } else {
+        const actual = activeRecord.actual ?? (activeRecord.stock + activeRecord.difference);
+        $('#restoreEventBody').textContent = `上一次撤销有误，现已恢复原调整，当前库存为 ${actual} ${activeRecord.unit}。恢复原因：${reverseReason}。所有操作记录均已保留。`;
+        restored = true; hide('#reverseModal'); openDetail('adjusted', false); showToast('原调整已恢复，之前的操作记录仍保留');
+      }
+    });
+
+    $('#explainFlow').addEventListener('click', () => show('#flowModal'));
+    $$('.close-flow').forEach(b => b.addEventListener('click', () => hide('#flowModal')));
+    $('#retryState').addEventListener('click', () => { setState('normal'); showToast('已重新加载原型数据'); });
+    $('#backInventory').addEventListener('click', () => showToast('演示：返回库存列表'));
+    document.addEventListener('keydown', event => {
+      const openOverlays = $$('.overlay:not(.hidden)');
+      if (!openOverlays.length) return;
+      const overlay = openOverlays.at(-1);
+      if (event.key === 'Escape') { event.preventDefault(); hide(`#${overlay.id}`); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...overlay.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(item => !item.classList.contains('hidden') && item.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0]; const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+
+    $('#toggleFeedback').addEventListener('click', () => {
+      const box = $('#feedbackBox'); box.classList.toggle('collapsed'); const collapsed = box.classList.contains('collapsed'); $('#toggleFeedback').textContent = collapsed ? '展开' : '收起'; $('#toggleFeedback').setAttribute('aria-expanded', String(!collapsed));
+    });
+    $$('.chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('selected')));
+    async function copyText(value, success) {
+      try { await navigator.clipboard.writeText(value); showToast(success); }
+      catch { $('#feedbackText').value = value; $('#feedbackText').select(); showToast('已放入文本框，请手动复制'); }
+    }
+    $('#copyFeedback').addEventListener('click', () => {
+      const chips = $$('.chip.selected').map(c => c.dataset.chip); const note = $('#feedbackText').value.trim();
+      const region = $('#feedbackRegion').value;
+      const stateNames = { normal: '有数据', empty: '空页', error: '加载失败', permission: '无权限', conflict: '库存变化' };
+      const roleNames = { all: '全部权限', record: '仅盘点', adjust: '盘点＋调整', reverse: '盘点＋撤销' };
+      const value = [`库存盘点原型反馈（${region}）：${chips.length ? chips.join('、') : '未选择快捷项'}`, note ? `补充：${note}` : '', `当前页面：${stateNames[pageState]}；权限：${roleNames[roleMode]}`].filter(Boolean).join('\n');
+      copyText(value, '反馈已复制，可直接粘贴给我');
+    });
+    $('#approveMockup').addEventListener('click', () => copyText('库存盘点原型：这版可以定稿，进入前端开发。', '定稿语句已复制'));
+    setRole('all'); setState('normal');
+  </script>
+</body>
+</html>

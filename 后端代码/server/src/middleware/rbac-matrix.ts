@@ -4,9 +4,11 @@
 export type Level = 'R' | 'W'
 export type PermMap = Record<string, Level>
 
-/** 31 个业务模块（权限码）。partners/partner_pricing = 按医院成本盈利特性新增；antibody_cost = 逐抗体成本地基；account_reconcile = 账实核对（财务域·区别于 BOM 消耗对账 reconciliation）。 */
+/** 33 个业务模块（权限码）。盘点记录、数量调整和反向补偿是三个独立能力。 */
 export const MODULES = [
-  'inventory', 'inbound', 'outbound', 'transfers', 'stocktaking', 'returns', 'scraps',
+  'inventory', 'inbound', 'outbound', 'transfers',
+  'stocktaking', 'stocktaking_adjust', 'stocktaking_reverse',
+  'returns', 'scraps',
   'materials', 'categories', 'locations',
   'bom', 'projects',
   'suppliers', 'purchase_orders', 'supplier_returns',
@@ -33,7 +35,8 @@ export const SEED_MATRIX: Record<string, PermMap> = {
   //   ⚠️ 既有库的 lab_director 行(roles.permissions)会 shadow 本矩阵（getEffectivePermissionsForRoles 先读 roles 行）
   //   → 单改此处对既有库静默无效；配套迁移 reconcileLabDirectorInventoryPerms（DatabaseManager）把既有行两键对齐 'W'、保证全库生效。
   lab_director: {
-    inventory: 'R', inbound: 'R', outbound: 'R', transfers: 'W', stocktaking: 'W', returns: 'W', scraps: 'W',
+    inventory: 'R', inbound: 'R', outbound: 'R', transfers: 'W',
+    stocktaking: 'W', stocktaking_adjust: 'W', stocktaking_reverse: 'W', returns: 'W', scraps: 'W',
     materials: 'R', categories: 'R', locations: 'R',
     bom: 'W', projects: 'W',
     suppliers: 'R', purchase_orders: 'R', supplier_returns: 'R',
@@ -45,7 +48,8 @@ export const SEED_MATRIX: Record<string, PermMap> = {
     alerts: 'R', users: 'W', roles: 'W', logs: 'R',
   },
   warehouse_manager: {
-    inventory: 'W', inbound: 'W', outbound: 'W', transfers: 'W', stocktaking: 'W', returns: 'W', scraps: 'W',
+    inventory: 'W', inbound: 'W', outbound: 'W', transfers: 'W',
+    stocktaking: 'W', stocktaking_adjust: 'W', stocktaking_reverse: 'W', returns: 'W', scraps: 'W',
     materials: 'W', categories: 'W', locations: 'W',
     bom: 'R',
     suppliers: 'R', purchase_orders: 'R', supplier_returns: 'W',

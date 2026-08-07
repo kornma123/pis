@@ -402,7 +402,20 @@ describe('PIS-INV-G01 route-wide position cutover', () => {
 
     const filtered = await auth(request(app).get('/api/v1/inventory?status=low-stock'))
     expect(filtered.status).toBe(200)
-    expect(filtered.body.data.list.some((row: any) => row.materialId === ids.material)).toBe(true)
+    const lowStockRow = filtered.body.data.list.find((row: any) => row.materialId === ids.material)
+    expect(lowStockRow).toBeDefined()
+    const savedPosition = db.prepare(`
+      SELECT id, version FROM inventory_positions
+      WHERE material_id = ? AND location_id = ?
+    `).get(ids.material, ids.locA) as any
+    expect(lowStockRow.positions).toEqual([
+      expect.objectContaining({
+        id: savedPosition.id,
+        version: Number(savedPosition.version),
+        locationId: ids.locA,
+        quantity: 1,
+      }),
+    ])
 
     db.prepare("UPDATE batches SET expiry_date = date('now', '-1 day') WHERE material_id = ?").run(ids.material)
     const expired = await auth(request(app).get('/api/v1/inventory?status=expired'))
