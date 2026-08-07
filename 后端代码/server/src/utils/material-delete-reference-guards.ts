@@ -39,7 +39,6 @@ export function findMaterialInventoryConflicts(
       OR abs(quantity * 10000 - round(quantity * 10000)) >= 0.000001
       OR typeof(remaining) NOT IN ('integer', 'real')
       OR remaining <> 0
-      OR remaining > quantity
       OR typeof(status) <> 'integer'
       OR status <> 0
     )

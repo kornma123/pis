@@ -142,6 +142,17 @@ function oldHistory(materialId: string) {
   }
 }
 
+function businessFacts() {
+  const tables = [
+    'outbound_abc_details',
+    'abc_cost_pools',
+    'abc_periods',
+    'cost_runs',
+    'abc_cost_adjustments',
+  ]
+  return Object.fromEntries(tables.map(name => [name, db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all()]))
+}
+
 beforeAll(async () => {
   db = await getDb()
   const routes = (await import('../src/routes/stocktaking-v1.1.js')).default
@@ -221,6 +232,7 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
 
   it('applies a batch-position surplus atomically and keeps inbound/outbound history unchanged', async () => {
     const position = seedPosition(true)
+    db.prepare('UPDATE batches SET inbound_price = 5 WHERE id = ?').run(position.batchId)
     db.prepare(`
       INSERT INTO inbound_records
         (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, location_id, operator)
@@ -236,6 +248,7 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
       VALUES ('ST-OLD-OUT-I', 'ST-OLD-OUT', ?, ?, ?, 1, 'pcs', 0, 0)
     `).run(position.materialId, position.batchId, position.batchId)
     const historyBefore = oldHistory(position.materialId)
+    const businessBefore = businessFacts()
     const created = await record(position, 12, 'unknown')
     expect(created.status).toBe(200)
     expect(created.body.data.status).toBe('pending')
@@ -249,7 +262,7 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
       .toEqual({ quantity: 12, version: 1 })
     expect(db.prepare('SELECT quantity, remaining, status FROM batches WHERE id = ?').get(position.batchId))
-      .toEqual({ quantity: 12, remaining: 12, status: 1 })
+      .toEqual({ quantity: 10, remaining: 12, status: 1 })
     expect(db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(position.materialId)).toEqual({ stock: 12 })
     expect(db.prepare(`
       SELECT operation_kind, owner_id, batch_id, location_id, direction, quantity
@@ -269,12 +282,49 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
       event_kind: 'adjustment',
       parent_event_id: null,
       quantity_delta: 2,
-      batch_quantity_delta: 2,
+      batch_quantity_delta: 0,
       operator: 'warehouse-a',
       reason: 'unknown',
       chain_depth: 0,
     })
+    expect(db.prepare(`
+      SELECT type, quantity, before_stock, after_stock, related_id, operator
+      FROM stock_logs WHERE related_id = ?
+    `).get(eventId)).toEqual({
+      type: 'stocktaking_adjustment',
+      quantity: 2,
+      before_stock: 10,
+      after_stock: 12,
+      related_id: eventId,
+      operator: 'warehouse-a',
+    })
+    expect(db.prepare('SELECT remaining * inbound_price AS current_value FROM batches WHERE id = ?')
+      .get(position.batchId)).toEqual({ current_value: 60 })
     expect(oldHistory(position.materialId)).toEqual(historyBefore)
+    expect(businessFacts()).toEqual(businessBefore)
+
+    const { buildInventoryConsistencyIssues } = await import('../src/utils/inventory-consistency.js')
+    const { findMaterialInventoryConflicts } = await import('../src/utils/material-delete-reference-guards.js')
+    const issueCodes = () => buildInventoryConsistencyIssues(db)
+      .filter(issue => issue.entityId === position.materialId || issue.entityId === position.batchId)
+      .map(issue => issue.code)
+    expect(issueCodes()).not.toContain('BATCH_REMAINING_EXCEEDS_QUANTITY')
+    expect(issueCodes()).not.toContain('INVENTORY_BATCH_MISMATCH')
+    expect(issueCodes()).not.toContain('INVENTORY_LOCATION_MISMATCH')
+    expect(findMaterialInventoryConflicts(db, position.materialId)).toEqual([
+      { kind: 'inventory', id: expect.any(String) },
+      { kind: 'inventory_position', id: position.positionId },
+      { kind: 'batch', id: position.batchId },
+    ])
+
+    db.prepare('UPDATE inventory SET stock = 11 WHERE material_id = ?').run(position.materialId)
+    expect(issueCodes()).toEqual(expect.arrayContaining(['INVENTORY_BATCH_MISMATCH', 'INVENTORY_LOCATION_MISMATCH']))
+    db.prepare('UPDATE inventory SET stock = 12 WHERE material_id = ?').run(position.materialId)
+    db.prepare('UPDATE inventory_positions SET quantity = 11 WHERE id = ?').run(position.positionId)
+    expect(issueCodes()).toContain('INVENTORY_LOCATION_MISMATCH')
+    db.prepare('UPDATE inventory_positions SET quantity = 12 WHERE id = ?').run(position.positionId)
+    db.prepare('UPDATE batches SET remaining = 11 WHERE id = ?').run(position.batchId)
+    expect(issueCodes()).toContain('INVENTORY_BATCH_MISMATCH')
   })
 
   it('applies a non-batch position deficit without manufacturing a batch', async () => {
@@ -358,14 +408,14 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(corrected.body.data.status).toBe('adjusted')
     expect(db.prepare('SELECT quantity FROM inventory_positions WHERE id = ?').get(position.positionId)).toEqual({ quantity: 12 })
     expect(db.prepare('SELECT quantity, remaining FROM batches WHERE id = ?').get(position.batchId))
-      .toEqual({ quantity: 12, remaining: 12 })
+      .toEqual({ quantity: 10, remaining: 12 })
     expect(db.prepare(`
       SELECT id, event_kind, parent_event_id, quantity_delta, batch_quantity_delta, chain_depth
       FROM stocktaking_adjustment_events WHERE stocktaking_record_id = ? ORDER BY chain_depth
     `).all(created.body.data.id)).toEqual([
-      { id: originalEventId, event_kind: 'adjustment', parent_event_id: null, quantity_delta: 2, batch_quantity_delta: 2, chain_depth: 0 },
-      { id: reversalEventId, event_kind: 'compensation', parent_event_id: originalEventId, quantity_delta: -2, batch_quantity_delta: -2, chain_depth: 1 },
-      { id: corrected.body.data.eventId, event_kind: 'compensation', parent_event_id: reversalEventId, quantity_delta: 2, batch_quantity_delta: 2, chain_depth: 2 },
+      { id: originalEventId, event_kind: 'adjustment', parent_event_id: null, quantity_delta: 2, batch_quantity_delta: 0, chain_depth: 0 },
+      { id: reversalEventId, event_kind: 'compensation', parent_event_id: originalEventId, quantity_delta: -2, batch_quantity_delta: 0, chain_depth: 1 },
+      { id: corrected.body.data.eventId, event_kind: 'compensation', parent_event_id: reversalEventId, quantity_delta: 2, batch_quantity_delta: 0, chain_depth: 2 },
     ])
     expect(db.prepare(`
       SELECT source_allocation_id FROM inventory_transaction_allocations WHERE owner_id = ?
@@ -376,8 +426,8 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     const position = seedPosition(true)
     const before = fullFacts(position.materialId)
     const negative = await record(position, -1)
-    expect(negative.status).toBe(409)
-    expect(negative.body.error.code).toBe('INVENTORY_LEDGER_CORRUPT')
+    expect(negative.status).toBe(400)
+    expect(negative.body.error.code).toBe('INVALID_PARAMETER')
 
     const unknown = await withActor().post('/api/v1/stocktaking').send({
       ...recordBody(position, 10),
@@ -445,6 +495,33 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     const response = await withActor().post(`/api/v1/stocktaking/${created.body.data.id}/adjust`).send({})
     expect(response.status).toBe(409)
     expect(response.body.error.code).toBe('STOCK_CHANGED')
+    expect(fullFacts(position.materialId)).toEqual(beforeRejected)
+  })
+
+  it('rejects an old snapshot after zero-balance deletion and compensation recreate the same position id', async () => {
+    const position = seedPosition(false)
+    const oldSnapshot = await record(position, 9, 'old_snapshot')
+    expect(oldSnapshot.status).toBe(200)
+
+    const deleteSnapshot = await record(position, 0, 'counted_zero')
+    const deleted = await withActor().post(`/api/v1/stocktaking/${deleteSnapshot.body.data.id}/adjust`).send({})
+    expect(deleted.status).toBe(200)
+    expect(db.prepare('SELECT id FROM inventory_positions WHERE id = ?').get(position.positionId)).toBeUndefined()
+
+    const recreated = await withActor().post(`/api/v1/stocktaking/${deleteSnapshot.body.data.id}/reverse`).send({
+      eventId: deleted.body.data.eventId,
+      reason: 'restore deleted position',
+    })
+    expect(recreated.status).toBe(200)
+    expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10, version: 2 })
+
+    const beforeRejected = fullFacts(position.materialId)
+    const stale = await withActor().post(`/api/v1/stocktaking/${oldSnapshot.body.data.id}/adjust`).send({})
+    expect(stale.status).toBe(409)
+    expect(stale.body.error.code).toBe('STOCK_CHANGED')
+    expect(db.prepare('SELECT quantity FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10 })
     expect(fullFacts(position.materialId)).toEqual(beforeRejected)
   })
 

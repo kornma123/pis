@@ -3444,6 +3444,111 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   }
 }
 
+function createCanonicalBatchesTable(
+  database: DatabaseSync,
+  tableName: 'batches' | 'batches_w1_rebuild',
+  ifNotExists = false,
+): void {
+  database.exec(`
+    CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}${tableName} (
+      id TEXT PRIMARY KEY,
+      material_id TEXT NOT NULL,
+      batch_no TEXT NOT NULL,
+      quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(quantity) IN ('integer', 'real')
+          AND quantity >= 0
+          AND quantity <= 900719925474.0991
+          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+        ),
+      remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(remaining) IN ('integer', 'real')
+          AND remaining >= 0
+          AND remaining <= 900719925474.0991
+          AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
+        ),
+      production_date TEXT,
+      expiry_date TEXT,
+      inbound_id TEXT NOT NULL,
+      inbound_price DECIMAL(18, 4) DEFAULT 0,
+      supplier_id TEXT,
+      status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
+      UNIQUE(material_id, batch_no)
+    )
+  `)
+}
+
+export function ensureBatchStocktakingSurplusSchema(database: DatabaseSync): void {
+  const schema = database.prepare(`
+    SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'batches'
+  `).get() as { sql?: string } | undefined
+  if (!schema?.sql) {
+    createCanonicalBatchesTable(database, 'batches')
+    return
+  }
+  const expiryColumn = (database.prepare('PRAGMA table_info(batches)').all() as any[])
+    .find(column => column.name === 'expiry_date')
+  const hasHistoricalRemainingCeiling = /CHECK\s*\(\s*remaining\s*<=\s*quantity\s*\)/i.test(schema.sql)
+  if (!hasHistoricalRemainingCeiling && expiryColumn?.notnull !== 1) return
+
+  const preservedObjects = database.prepare(`
+    SELECT type, name, sql FROM sqlite_master
+    WHERE tbl_name = 'batches'
+      AND type IN ('index', 'trigger')
+      AND sql IS NOT NULL
+    ORDER BY CASE type WHEN 'trigger' THEN 0 ELSE 1 END, name
+  `).all() as Array<{ type: 'index' | 'trigger'; name: string; sql: string }>
+  const beforeCount = Number((database.prepare('SELECT COUNT(*) AS count FROM batches').get() as any).count)
+  let upgradeError: Error | null = null
+  let transactionStarted = false
+  try {
+    database.exec('PRAGMA foreign_keys = OFF')
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    if (database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'batches_w1_rebuild'").get()) {
+      throw new Error('temporary rebuild table already exists')
+    }
+    createCanonicalBatchesTable(database, 'batches_w1_rebuild')
+    database.exec(`
+      INSERT INTO batches_w1_rebuild
+        (id, material_id, batch_no, quantity, remaining, production_date, expiry_date,
+         inbound_id, inbound_price, supplier_id, status, created_at, updated_at)
+      SELECT id, material_id, batch_no, quantity, remaining, production_date, expiry_date,
+             inbound_id, inbound_price, supplier_id, status, created_at, updated_at
+      FROM batches
+    `)
+    const copiedCount = Number((database.prepare(
+      'SELECT COUNT(*) AS count FROM batches_w1_rebuild',
+    ).get() as any).count)
+    if (copiedCount !== beforeCount) throw new Error('batch row count changed during rebuild')
+    database.exec('DROP TABLE batches')
+    database.exec('ALTER TABLE batches_w1_rebuild RENAME TO batches')
+    for (const object of preservedObjects) database.exec(object.sql)
+    const violations = database.prepare('PRAGMA foreign_key_check').all()
+    if (violations.length > 0) throw new Error('foreign key validation failed')
+    database.exec('COMMIT')
+    transactionStarted = false
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message : String(caught)
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+        transactionStarted = false
+      } catch (rollbackError) {
+        const rollbackDetail = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        upgradeError = new Error(`BATCH_STOCKTAKING_SCHEMA_UPGRADE_FAILED: ${detail}; rollback failed: ${rollbackDetail}`)
+      }
+    }
+    upgradeError ??= new Error(`BATCH_STOCKTAKING_SCHEMA_UPGRADE_FAILED: ${detail}`)
+  }
+  repinForeignKeysAfterMigration(database, 'batch-stocktaking-surplus-upgrade', upgradeError)
+  if (upgradeError) throw upgradeError
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
   const allowFixtures = allowDefaultFixtureUsers()
@@ -3518,79 +3623,8 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS batches (
-      id TEXT PRIMARY KEY,
-      material_id TEXT NOT NULL,
-      batch_no TEXT NOT NULL,
-      quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
-        CHECK (
-          typeof(quantity) IN ('integer', 'real')
-          AND quantity >= 0
-          AND quantity <= 900719925474.0991
-          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
-        ),
-      remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
-        CHECK (
-          typeof(remaining) IN ('integer', 'real')
-          AND remaining >= 0
-          AND remaining <= 900719925474.0991
-          AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
-        ),
-      production_date TEXT,
-      expiry_date TEXT,
-      inbound_id TEXT NOT NULL,
-      inbound_price DECIMAL(18, 4) DEFAULT 0,
-      supplier_id TEXT,
-      status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (remaining <= quantity),
-      CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
-      UNIQUE(material_id, batch_no)
-    )
-  `)
-
-  // 兼容旧数据库：移除 batches.expiry_date 的 NOT NULL 约束
-  try {
-    const batchCols = database.prepare("PRAGMA table_info(batches)").all() as any[]
-    const expiryCol = batchCols.find(c => c.name === 'expiry_date')
-    if (expiryCol && expiryCol.notnull === 1) {
-      database.exec(`
-        BEGIN TRANSACTION;
-        CREATE TABLE batches_new (
-          id TEXT PRIMARY KEY, material_id TEXT NOT NULL, batch_no TEXT NOT NULL,
-          quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
-            CHECK (
-              typeof(quantity) IN ('integer', 'real')
-              AND quantity >= 0
-              AND quantity <= 900719925474.0991
-              AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
-            ),
-          remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
-            CHECK (
-              typeof(remaining) IN ('integer', 'real')
-              AND remaining >= 0
-              AND remaining <= 900719925474.0991
-              AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
-            ),
-          production_date TEXT, expiry_date TEXT, inbound_id TEXT NOT NULL,
-          inbound_price DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT,
-          status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CHECK (remaining <= quantity),
-          CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
-          UNIQUE(material_id, batch_no)
-        );
-        INSERT INTO batches_new SELECT * FROM batches;
-        DROP TABLE batches;
-        ALTER TABLE batches_new RENAME TO batches;
-        COMMIT;
-      `)
-      console.log('Migrated batches table: removed NOT NULL from expiry_date')
-    }
-  } catch (e: any) { console.error('Migration error for batches:', e.message) }
+  createCanonicalBatchesTable(database, 'batches', true)
+  ensureBatchStocktakingSurplusSchema(database)
   database.exec(`
     CREATE TABLE IF NOT EXISTS inbound_records (id TEXT PRIMARY KEY, inbound_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL, material_id TEXT NOT NULL, batch_id TEXT, batch_no TEXT, quantity DECIMAL(18, 4) NOT NULL, unit TEXT NOT NULL, price DECIMAL(18, 4) DEFAULT 0, amount DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT, location_id TEXT NOT NULL, production_date TEXT, expiry_date TEXT, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, cancel_reason TEXT, purchase_order_id TEXT, purchase_order_no TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)

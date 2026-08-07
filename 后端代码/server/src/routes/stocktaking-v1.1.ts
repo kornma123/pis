@@ -75,6 +75,32 @@ function optionalText(value: unknown): string | null {
   return value.trim()
 }
 
+function parseActualStock(value: unknown): number {
+  try {
+    return parseInventoryQuantity(value)
+  } catch (caught) {
+    if (caught instanceof InventoryTransactionError) {
+      fail('Actual stock is invalid', 'INVALID_PARAMETER', 400)
+    }
+    throw caught
+  }
+}
+
+function nextRecreatedPositionVersion(db: any, positionId: string): number {
+  const row = db.prepare(`
+    SELECT MAX(r.snapshot_position_version + e.chain_depth + 1) AS latest_version
+    FROM stocktaking_adjustment_events e
+    JOIN stocktaking_records r ON r.id = e.stocktaking_record_id
+    WHERE e.position_id = ? AND r.snapshot_position_version IS NOT NULL
+  `).get(positionId) as { latest_version: number | null }
+  if (row.latest_version === null) return 0
+  const next = Number(row.latest_version) + 1
+  if (!Number.isSafeInteger(next) || next < 0) {
+    fail('Position version history is invalid', 'INVENTORY_LEDGER_CORRUPT', 409)
+  }
+  return next
+}
+
 function rowIdentityMatches(row: any, body: any): boolean {
   return row.material_id === body.materialId
     && row.batch_id === (body.batchId ?? null)
@@ -319,7 +345,7 @@ router.post('/', requireStocktakingRecord, (req: StocktakingActorRequest, res) =
   }
   let transactionStarted = false
   try {
-    const actual = parseInventoryQuantity(actualStock)
+    const actual = parseActualStock(actualStock)
     const reason = optionalText(req.body.reason)
     const remark = optionalText(req.body.remark)
     const db = getDatabase()
@@ -364,7 +390,7 @@ router.post('/batch', requireStocktakingRecord, (req: StocktakingActorRequest, r
         error(res, 'Material not found', 'NOT_FOUND', 422)
         return
       }
-      const actual = parseInventoryQuantity(item.actualStock)
+      const actual = parseActualStock(item.actualStock)
       const system = assertInventoryConserved(db, item.materialId)
       if (inventoryQuantityDelta(actual, system) !== 0) {
         error(res, 'Position detail is required for an inventory adjustment', 'BATCH_DETAIL_REQUIRED', 422)
@@ -429,7 +455,9 @@ router.post('/:id/adjust', requireStocktakingAdjust, (req: StocktakingActorReque
     if (!reason) fail('Adjustment reason is required', 'REASON_REQUIRED', 400)
     ensureSnapshotCurrent(db, record)
     const quantityDelta = parseInventoryQuantity(record.difference, { allowNegative: true })
-    const batchQuantityDelta = record.batch_id && quantityDelta > 0 ? quantityDelta : 0
+    // `batches.quantity` is cumulative effective receipt history. Stocktaking
+    // changes current on-hand facts only; the named event explains the delta.
+    const batchQuantityDelta = 0
     const eventId = uuidv4()
     const plan = planExactPositionDelta(db, {
       materialId: record.material_id,
@@ -538,6 +566,7 @@ router.post('/:id/reverse', requireStocktakingReverse, (req: StocktakingActorReq
       batchQuantityDelta,
       ownerLineId: record.id,
       sourceAllocationId: sourceAllocation.id,
+      recreatedPositionVersion: nextRecreatedPositionVersion(db, target.position_id),
     })
     persistInventoryEvent(db, {
       eventId,

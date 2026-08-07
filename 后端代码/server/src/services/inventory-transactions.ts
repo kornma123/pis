@@ -97,6 +97,7 @@ export type ExactPositionDeltaInput = {
   batchQuantityDelta?: unknown
   ownerLineId?: string | null
   sourceAllocationId?: string | null
+  recreatedPositionVersion?: number
 }
 
 type MaterialState = {
@@ -229,7 +230,7 @@ export function inventoryQuantityDelta(left: unknown, right: unknown): number {
 
 function assertBatchState(batch: BatchState): void {
   if (!batch.id || !batch.materialId || !batch.batchNo) corrupt('batch identity is missing')
-  if (batch.quantityUnits < 0 || batch.remainingUnits < 0 || batch.remainingUnits > batch.quantityUnits) {
+  if (batch.quantityUnits < 0 || batch.remainingUnits < 0) {
     corrupt(`batch ${batch.id} violates quantity conservation`)
   }
   if ((batch.remainingUnits === 0 && batch.status !== 0) || (batch.remainingUnits > 0 && batch.status !== 1)) {
@@ -445,9 +446,6 @@ function addToPosition(
   position.quantityUnits = checkedUnits(position.quantityUnits, quantityUnits)
   if (batch && adjustBatch) {
     batch.remainingUnits = checkedUnits(batch.remainingUnits, quantityUnits)
-    if (batch.remainingUnits > batch.quantityUnits) {
-      throw new InventoryTransactionError('Return exceeds the source batch capacity', 'BATCH_CAPACITY_EXCEEDED', 422)
-    }
     batch.status = 1
     assertBatchState(batch)
   }
@@ -721,13 +719,17 @@ export function planExactPositionDelta(db: any, input: ExactPositionDeltaInput):
     if (quantityDeltaUnits < 0) {
       throw new InventoryTransactionError('Position is unavailable', 'POSITION_NOT_FOUND', 409)
     }
+    const recreatedVersion = input.recreatedPositionVersion ?? 0
+    if (!Number.isSafeInteger(recreatedVersion) || recreatedVersion < 0) {
+      corrupt('recreated position version is invalid')
+    }
     position = {
       id: input.positionId,
       materialId: input.materialId,
       batchId: input.batchId,
       locationId: input.locationId,
       quantityUnits: 0,
-      version: 0,
+      version: recreatedVersion,
       existed: false,
     }
     state.positions.push(position)
@@ -837,13 +839,14 @@ export function applyInventoryPlan(db: any, plan: InventoryPlan): void {
       } else {
         db.prepare(`
           INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity, version)
-          VALUES (?, ?, ?, ?, ?, 0)
+          VALUES (?, ?, ?, ?, ?, ?)
         `).run(
           position.id,
           material.materialId,
           position.batchId,
           position.locationId,
           fromUnits(position.quantityUnits),
+          position.version,
         )
       }
     }
