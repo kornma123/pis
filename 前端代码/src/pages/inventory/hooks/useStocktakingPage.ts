@@ -1,275 +1,372 @@
-import { useState, useEffect, useMemo } from 'react'
-import request from '@/api/request'
-import { materialApi } from '@/api/master'
-import type { Material } from '@/types'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { usePagination } from '@/hooks/usePagination'
+import { inventoryApi } from '@/api/inventory'
+import {
+  apiErrorCode,
+  stocktakingApi,
+  type StocktakingDetail,
+  type StocktakingRecord,
+} from '@/api/stocktaking'
+import { canAccess } from '@/lib/permissions'
 import { useUrlParams } from '@/hooks/useUrlParams'
 
-export interface StocktakingRecord {
+export type StocktakingModal = 'create' | 'detail' | 'adjust' | 'reverse' | 'flow' | null
+
+export interface StocktakingPositionOption {
   id: string
-  stocktakingNo: string
+  version: number
   materialId: string
+  materialCode: string
   materialName: string
-  systemStock: number
-  actualStock: number
-  difference: number
-  operator: string
-  status: string
-  createdAt: string
-  remark?: string
+  unit: string
+  batchId: string | null
+  batchNo: string | null
+  locationId: string
+  locationName: string
+  quantity: number
 }
 
-export interface FormData {
-  materialId: string
-  systemStock: number
-  actualStock: number
-  remark: string
-  name: string
-  type: 'full' | 'sample'
-  scope: string
-  manager: string
+export interface StockConflict {
+  record: StocktakingDetail
+  currentStock: number | null
+  currentPosition: StocktakingPositionOption | null
+  refreshed: boolean
 }
-
-export interface BatchRow {
-  materialId: string
-  actualStock: number | ''
-  remark: string
-}
-
-export const scopeOptions = [
-  { value: '', label: '全部范围' },
-  { value: 'all', label: '全部物料' },
-  { value: 'category', label: '指定分类' },
-  { value: 'location', label: '指定库位' },
-]
 
 export const statusOptions = [
   { value: '', label: '全部状态' },
-  { value: 'in_progress', label: '进行中' },
-  { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已取消' },
+  { value: 'pending', label: '待处理' },
+  { value: 'adjusted', label: '已调整' },
+  { value: 'compensated', label: '已撤销调整' },
+  { value: 'completed', label: '账实相符' },
+  { value: 'unresolved', label: '批次或库位待核实' },
 ]
 
-// 盘点单状态 → 展示（两阶段口径）：pending 待处理差异未入账；confirmed 差异已处理入账；
-// completed 账实相符/批量即时入账；cancelled 已取消。未知状态兜底原样显示。
 export const stocktakingStatusDisplay: Record<string, { label: string; cls: string }> = {
-  pending: { label: '待处理', cls: 'bg-amber-50 text-amber-600' },
-  confirmed: { label: '已调整', cls: 'bg-green-50 text-green-600' },
-  completed: { label: '已完成', cls: 'bg-green-50 text-green-600' },
+  pending: { label: '待处理', cls: 'bg-amber-50 text-amber-700' },
+  adjusted: { label: '已调整', cls: 'bg-blue-50 text-blue-700' },
+  compensated: { label: '已撤销调整', cls: 'bg-gray-100 text-gray-700' },
+  completed: { label: '账实相符', cls: 'bg-emerald-50 text-emerald-700' },
+  unresolved: { label: '待核实', cls: 'bg-orange-50 text-orange-700' },
   cancelled: { label: '已取消', cls: 'bg-gray-100 text-gray-500' },
 }
+
 export function getStocktakingStatusDisplay(status: string) {
-  return stocktakingStatusDisplay[status] || { label: status || '-', cls: 'bg-gray-100 text-gray-500' }
+  return stocktakingStatusDisplay[status] ?? { label: status || '-', cls: 'bg-gray-100 text-gray-600' }
+}
+
+export function quantityUnits(value: number): number {
+  return Math.round(value * 10000)
+}
+
+export function formatQuantity(value: number): string {
+  const fixed = (quantityUnits(value) / 10000).toFixed(4)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+export function parseQuantityInput(value: string): number | null {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(value.trim())) return null
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? number : null
+}
+
+function flattenPositions(items: Awaited<ReturnType<typeof inventoryApi.getList>>['list']) {
+  return items.flatMap<StocktakingPositionOption>(item => (item.positions ?? []).map(position => ({
+    id: position.id,
+    version: position.version,
+    materialId: item.materialId,
+    materialCode: item.code,
+    materialName: item.name,
+    unit: item.unit,
+    batchId: position.batchId,
+    batchNo: position.batchNo,
+    locationId: position.locationId,
+    locationName: position.locationName,
+    quantity: Number(position.quantity),
+  })))
 }
 
 export function useStocktakingPage() {
-  const url = useUrlParams()
-
-  const initialPage = Math.max(1, url.getNumber('page', 1))
-  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 20))
-    ? url.getNumber('pageSize', 20)
+  const { get, getNumber, setMultiple } = useUrlParams()
+  const queryClient = useQueryClient()
+  const initialPage = Math.max(1, getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
     : 20
+  const [page, setPage] = useState(initialPage)
+  const [pageSize, setPageSizeState] = useState(initialPageSize)
+  const [keyword, setKeyword] = useState(get('keyword', ''))
+  const [appliedKeyword, setAppliedKeyword] = useState(keyword)
+  const [statusFilter, setStatusFilter] = useState(get('status', ''))
+  const [modal, setModal] = useState<StocktakingModal>(null)
+  const [returnFocus, setReturnFocus] = useState<HTMLElement | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1)
+  const [positionKeyword, setPositionKeyword] = useState('')
+  const deferredPositionKeyword = useDeferredValue(positionKeyword)
+  const [selectedPositionId, setSelectedPositionId] = useState('')
+  const [actualStock, setActualStock] = useState('')
+  const [remark, setRemark] = useState('')
+  const [adjustReason, setAdjustReason] = useState('pending')
+  const [explanation, setExplanation] = useState('')
+  const [reverseReason, setReverseReason] = useState('')
+  const [conflict, setConflict] = useState<StockConflict | null>(null)
 
-  const [keyword, setKeyword] = useState(url.get('keyword', ''))
-  const [statusFilter, setStatusFilter] = useState('')
-  const [scopeFilter, setScopeFilter] = useState('')
-
-  const [modalType, setModalType] = useState<'create' | 'detail' | 'adjust' | 'batch' | null>(null)
-  const [batchRows, setBatchRows] = useState<BatchRow[]>([])
-  const [batchOperator, setBatchOperator] = useState('')
-  const [detailRow, setDetailRow] = useState<StocktakingRecord | null>(null)
-  const [adjustReason, setAdjustReason] = useState('')
-  const [adjustNote, setAdjustNote] = useState('')
-  const [createStep, setCreateStep] = useState(1)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [recordToDelete, setRecordToDelete] = useState<StocktakingRecord | null>(null)
-
-  const [materials, setMaterials] = useState<Material[]>([])
-  const [form, setForm] = useState<FormData>({
-    materialId: '', systemStock: 0, actualStock: 0, remark: '',
-    name: '', type: 'full', scope: 'all', manager: ''
-  })
-
-  const {
-    data, loading, page, pageSize, total,
-    setPage, setPageSize, refresh,
-  } = usePagination<StocktakingRecord>({
-    fetchFn: async (params) => {
-      const res: any = await request.get('/stocktaking', {
-        params: { ...params, keyword: keyword || undefined },
-      })
-      return {
-        list: res?.list || [],
-        pagination: res?.pagination,
-      }
-    },
-    initialPage,
-    initialPageSize,
-    deps: [keyword],
-  })
+  const canRecord = canAccess('stocktaking', 'W')
+  const canAdjust = canAccess('stocktaking_adjust', 'W')
+  const canReverse = canAccess('stocktaking_reverse', 'W')
 
   useEffect(() => {
-    url.setMultiple({
+    setMultiple({
       page: page > 1 ? page : null,
       pageSize: pageSize !== 20 ? pageSize : null,
-      keyword: keyword || null,
+      keyword: appliedKeyword || null,
+      status: statusFilter || null,
     })
-  }, [page, pageSize, keyword])
+  }, [page, pageSize, appliedKeyword, statusFilter, setMultiple])
 
-  const stats = useMemo(() => {
-    const inProgress = data.filter(d => d.status === 'in_progress').length
-    // 已完成 = 已了结（账实相符 completed + 差异已处理入账 confirmed）；两阶段下 confirmed 不应从已完成里消失
-    const completed = data.filter(d => d.status === 'completed' || d.status === 'confirmed').length
-    // 待处理差异 = 待入账的 pending（两阶段口径），而非「所有差异≠0」——否则已处理(confirmed)会被一直计入、永不归零
-    const diffCount = data.filter(d => d.status === 'pending').length
-    const accuracy = data.length > 0
-      ? ((data.filter(d => d.difference === 0).length / data.length) * 100).toFixed(1)
-      : '100.0'
-    return { inProgress, completed, diffCount, accuracy }
-  }, [data])
+  const listQuery = useQuery({
+    queryKey: ['stocktaking', 'list', page, pageSize, appliedKeyword, statusFilter],
+    queryFn: () => stocktakingApi.getList({
+      page,
+      pageSize,
+      keyword: appliedKeyword || undefined,
+      status: statusFilter || undefined,
+    }),
+  })
+  const statsQuery = useQuery({
+    queryKey: ['stocktaking', 'stats'],
+    queryFn: stocktakingApi.getStats,
+  })
+  const positionsQuery = useQuery({
+    queryKey: ['inventory', 'stocktaking-positions', deferredPositionKeyword],
+    queryFn: () => inventoryApi.getList({
+      page: 1,
+      pageSize: 200,
+      keyword: deferredPositionKeyword || undefined,
+    }),
+    enabled: modal === 'create',
+  })
+  const detailQuery = useQuery({
+    queryKey: ['stocktaking', 'detail', detailId],
+    queryFn: () => stocktakingApi.getDetail(detailId!),
+    enabled: Boolean(detailId && ['detail', 'adjust', 'reverse'].includes(modal ?? '')),
+  })
 
-  const openCreate = async () => {
-    const res: any = await materialApi.getList({ page: 1, pageSize: 999, status: 'active' })
-    setMaterials(res?.list || [])
-    setForm({
-      materialId: '', systemStock: 0, actualStock: 0, remark: '',
-      name: '', type: 'full', scope: 'all', manager: ''
-    })
-    setCreateStep(1)
-    setModalType('create')
+  const positions = useMemo(
+    () => flattenPositions(positionsQuery.data?.list ?? []),
+    [positionsQuery.data],
+  )
+  const selectedPosition = positions.find(position => position.id === selectedPositionId) ?? null
+
+  async function refreshAll(recordId?: string) {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['stocktaking', 'list'] }),
+      queryClient.invalidateQueries({ queryKey: ['stocktaking', 'stats'] }),
+      queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+      recordId
+        ? queryClient.invalidateQueries({ queryKey: ['stocktaking', 'detail', recordId] })
+        : Promise.resolve(),
+    ])
   }
 
-  const handleSubmit = async () => {
-    if (!form.materialId) { toast.error('请选择物料'); return }
-    if (form.actualStock === undefined || form.actualStock === null) {
-      toast.error('请输入实盘数量')
+  const createMutation = useMutation({
+    mutationFn: stocktakingApi.create,
+    onSuccess: async result => {
+      await refreshAll(result.id)
+      toast.success(result.status === 'completed'
+        ? '盘点已保存，账实相符'
+        : '盘点已保存，当前库存未调整')
+      setDetailId(result.id)
+      setModal('detail')
+    },
+  })
+  const adjustMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => stocktakingApi.adjust(id, reason),
+    onSuccess: async result => {
+      await refreshAll(result.id)
+      toast.success('库存已按盘点结果调整')
+      setModal('detail')
+    },
+    onError: async error => {
+      if (apiErrorCode(error) !== 'STOCK_CHANGED' || !detailQuery.data) return
+      setConflict({ record: detailQuery.data, currentStock: null, currentPosition: null, refreshed: false })
+      setModal(null)
+      await refreshAll(detailQuery.data.id)
+    },
+  })
+  const explanationMutation = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => stocktakingApi.appendExplanation(id, text),
+    onSuccess: async (_, input) => {
+      setExplanation('')
+      await refreshAll(input.id)
+      toast.success('说明已补充，原操作记录未更改')
+    },
+  })
+  const reverseMutation = useMutation({
+    mutationFn: ({ id, eventId, reason }: { id: string; eventId: string; reason: string }) =>
+      stocktakingApi.reverse(id, eventId, reason),
+    onSuccess: async result => {
+      setReverseReason('')
+      await refreshAll(result.id)
+      toast.success(result.status === 'adjusted' ? '原调整已恢复' : '库存调整已撤销')
+      setModal('detail')
+    },
+  })
+
+  function openCreate(position?: StocktakingPositionOption, desiredActual?: number) {
+    if (modal === null && document.activeElement instanceof HTMLElement) setReturnFocus(document.activeElement)
+    setCreateStep(1)
+    setPositionKeyword(position?.materialCode ?? '')
+    setSelectedPositionId(position?.id ?? '')
+    setActualStock(desiredActual === undefined ? '' : formatQuantity(desiredActual))
+    setRemark('')
+    setModal('create')
+  }
+
+  function openDetail(record: StocktakingRecord) {
+    if (modal === null && document.activeElement instanceof HTMLElement) setReturnFocus(document.activeElement)
+    setDetailId(record.id)
+    setModal('detail')
+  }
+
+  function openAdjust(record: StocktakingRecord | StocktakingDetail) {
+    if (modal === null && document.activeElement instanceof HTMLElement) setReturnFocus(document.activeElement)
+    setDetailId(record.id)
+    setAdjustReason('pending')
+    setModal('adjust')
+  }
+
+  function openReverse(record: StocktakingDetail) {
+    setDetailId(record.id)
+    setReverseReason('')
+    setModal('reverse')
+  }
+
+  function openFlow() {
+    if (modal === null && document.activeElement instanceof HTMLElement) setReturnFocus(document.activeElement)
+    setModal('flow')
+  }
+
+  function submitCreate() {
+    const actual = parseQuantityInput(actualStock)
+    if (!selectedPosition) return toast.error('请选择库存位置')
+    if (actual === null) return toast.error('实盘数量不能小于 0，且最多保留 4 位小数')
+    createMutation.mutate({
+      materialId: selectedPosition.materialId,
+      positionId: selectedPosition.id,
+      batchId: selectedPosition.batchId,
+      locationId: selectedPosition.locationId,
+      actualStock: actual,
+      remark: remark.trim() || undefined,
+    })
+  }
+
+  function submitAdjust() {
+    if (!detailQuery.data) return
+    adjustMutation.mutate({ id: detailQuery.data.id, reason: adjustReason })
+  }
+
+  function submitExplanation() {
+    if (!detailQuery.data || !explanation.trim()) return
+    explanationMutation.mutate({ id: detailQuery.data.id, text: explanation.trim() })
+  }
+
+  function submitReverse() {
+    const detail = detailQuery.data
+    if (!detail?.latestEventId || !reverseReason.trim()) return
+    reverseMutation.mutate({ id: detail.id, eventId: detail.latestEventId, reason: reverseReason.trim() })
+  }
+
+  async function refreshConflict() {
+    if (!conflict) return
+    const [record, inventory] = await Promise.all([
+      stocktakingApi.getDetail(conflict.record.id),
+      inventoryApi.getList({ page: 1, pageSize: 200, keyword: conflict.record.materialCode }),
+    ])
+    const currentPosition = flattenPositions(inventory.list)
+      .find(position => position.id === conflict.record.positionId) ?? null
+    setConflict({
+      record,
+      currentStock: record.currentStock,
+      currentPosition,
+      refreshed: true,
+    })
+  }
+
+  function recountConflict() {
+    if (!conflict?.currentPosition) {
+      toast.error('该库存位置已不存在，请联系管理员核实批次和库位')
       return
     }
-    setIsSubmitting(true)
-    try {
-      await request.post('/stocktaking', {
-        materialId: form.materialId,
-        systemStock: form.systemStock,
-        actualStock: form.actualStock,
-        remark: form.remark
-      })
-      toast.success('盘点记录已创建')
-      setModalType(null)
-      refresh()
-    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ } finally { setIsSubmitting(false) }
+    const { currentPosition, record } = conflict
+    setConflict(null)
+    openCreate(currentPosition, record.actualStock)
   }
-
-  const openBatch = async () => {
-    const res: any = await materialApi.getList({ page: 1, pageSize: 999, status: 'active' })
-    setMaterials(res?.list || [])
-    setBatchRows([{ materialId: '', actualStock: '', remark: '' }])
-    setBatchOperator('')
-    setModalType('batch')
-  }
-
-  const handleBatchSubmit = async () => {
-    // 仅提交已选物料的行
-    const filled = batchRows.filter(r => r.materialId)
-    if (filled.length === 0) { toast.error('请至少添加一行物料'); return }
-    // 前端预校验：实盘数量必填、非负、不重复（与后端 all-or-nothing 同口径，避免无谓整单 422）
-    const seen = new Set<string>()
-    for (let i = 0; i < filled.length; i++) {
-      const r = filled[i]
-      if (r.actualStock === '' || r.actualStock === null || isNaN(Number(r.actualStock))) {
-        toast.error(`第 ${i + 1} 行：请输入实盘数量`); return
-      }
-      if (Number(r.actualStock) < 0) { toast.error(`第 ${i + 1} 行：实盘数量不能为负数`); return }
-      if (seen.has(r.materialId)) { toast.error(`第 ${i + 1} 行：物料重复`); return }
-      seen.add(r.materialId)
-    }
-    setIsSubmitting(true)
-    try {
-      await request.post('/stocktaking/batch', {
-        operator: batchOperator || undefined,
-        items: filled.map(r => ({
-          materialId: r.materialId,
-          actualStock: Number(r.actualStock),
-          remark: r.remark || undefined,
-        })),
-      })
-      toast.success(`批量盘点完成，共 ${filled.length} 项`)
-      setModalType(null)
-      refresh()
-    } catch (e) { /* 拦截器统一提示 */ } finally { setIsSubmitting(false) }
-  }
-
-  const openDetail = (row: StocktakingRecord) => {
-    setDetailRow(row)
-    setModalType('detail')
-  }
-
-  const openAdjust = (row: StocktakingRecord) => {
-    setDetailRow(row)
-    setAdjustReason('')
-    setAdjustNote('')
-    setModalType('adjust')
-  }
-
-  const handleAdjust = async () => {
-    if (!detailRow) return
-    if (!adjustReason) { toast.error('请选择差异原因'); return }
-    setIsSubmitting(true)
-    try {
-      await request.post(`/stocktaking/${detailRow.id}/adjust`, {
-        reason: adjustReason,
-        remark: adjustNote || undefined,
-      })
-      toast.success('盘点差异已处理，库存已更新')
-      setModalType(null)
-      refresh()
-    } catch {
-      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
-    } finally { setIsSubmitting(false) }
-  }
-
-  const openDelete = (row: StocktakingRecord) => {
-    setRecordToDelete(row)
-    setDeleteConfirmOpen(true)
-  }
-
-  const handleDelete = async () => {
-    if (!recordToDelete) return
-    try {
-      await request.delete(`/stocktaking/${recordToDelete.id}`)
-      toast.success('盘点记录已撤销')
-      setDeleteConfirmOpen(false)
-      setRecordToDelete(null)
-      refresh()
-    } catch {
-      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
-    }
-  }
-
-  const handleQuery = () => { setPage(1) }
-  const handleReset = () => { setKeyword(''); setStatusFilter(''); setScopeFilter(''); setPage(1) }
-
-  const selectedMaterial = materials.find(m => m.id === form.materialId)
 
   return {
-    data, loading, page, pageSize, total, setPage, setPageSize, refresh,
-    keyword, setKeyword, statusFilter, setStatusFilter, scopeFilter, setScopeFilter,
-    modalType, setModalType,
-    detailRow, setDetailRow,
-    createStep, setCreateStep,
-    isSubmitting, setIsSubmitting,
-    deleteConfirmOpen, setDeleteConfirmOpen,
-    recordToDelete, setRecordToDelete,
-    materials, setMaterials,
-    form, setForm,
-    stats,
-    handleQuery, handleReset,
-    openCreate, openDetail, openAdjust, openDelete,
-    handleSubmit, handleDelete, handleAdjust,
-    adjustReason, setAdjustReason, adjustNote, setAdjustNote,
-    selectedMaterial,
-    batchRows, setBatchRows, batchOperator, setBatchOperator,
-    openBatch, handleBatchSubmit,
+    data: listQuery.data?.list ?? [],
+    total: listQuery.data?.pagination.total ?? 0,
+    loading: listQuery.isLoading,
+    error: listQuery.isError,
+    retryList: listQuery.refetch,
+    stats: statsQuery.data ?? { todayCount: 0, pendingCount: 0, adjustedCount: 0, unresolvedCount: 0 },
+    page,
+    setPage,
+    pageSize,
+    setPageSize: (size: number) => { setPageSizeState(size); setPage(1) },
+    keyword,
+    setKeyword,
+    statusFilter,
+    setStatusFilter: (status: string) => { setStatusFilter(status); setPage(1) },
+    applyFilters: () => { setAppliedKeyword(keyword.trim()); setPage(1) },
+    resetFilters: () => { setKeyword(''); setAppliedKeyword(''); setStatusFilter(''); setPage(1) },
+    modal,
+    setModal,
+    returnFocus,
+    canRecord,
+    canAdjust,
+    canReverse,
+    detail: detailQuery.data ?? null,
+    detailLoading: detailQuery.isLoading,
+    createStep,
+    setCreateStep,
+    positions,
+    positionsLoading: positionsQuery.isLoading,
+    positionKeyword,
+    setPositionKeyword,
+    selectedPositionId,
+    setSelectedPositionId,
+    selectedPosition,
+    actualStock,
+    setActualStock,
+    remark,
+    setRemark,
+    adjustReason,
+    setAdjustReason,
+    explanation,
+    setExplanation,
+    reverseReason,
+    setReverseReason,
+    conflict,
+    setConflict,
+    openCreate,
+    openDetail,
+    openAdjust,
+    openReverse,
+    openFlow,
+    submitCreate,
+    submitAdjust,
+    submitExplanation,
+    submitReverse,
+    refreshConflict,
+    recountConflict,
+    createSubmitting: createMutation.isPending,
+    adjustSubmitting: adjustMutation.isPending,
+    explanationSubmitting: explanationMutation.isPending,
+    reverseSubmitting: reverseMutation.isPending,
   }
 }
+
+export type { StocktakingDetail, StocktakingRecord }

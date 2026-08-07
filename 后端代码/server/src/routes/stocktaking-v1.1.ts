@@ -52,6 +52,92 @@ type InventoryEventWrite = {
   plan: InventoryPlan
 }
 
+const STOCKTAKING_STATUSES = new Set([
+  'pending',
+  'completed',
+  'adjusted',
+  'compensated',
+  'unresolved',
+  'cancelled',
+])
+
+const STOCKTAKING_READ_SELECT = `
+  SELECT
+    r.*,
+    m.code AS material_code,
+    m.name AS material_name,
+    m.unit AS material_unit,
+    b.batch_no,
+    l.name AS location_name,
+    p.quantity AS current_stock,
+    p.version AS current_position_version,
+    (
+      SELECT e.id FROM stocktaking_adjustment_events e
+      WHERE e.stocktaking_record_id = r.id
+      ORDER BY e.chain_depth DESC, e.created_at DESC, e.id DESC
+      LIMIT 1
+    ) AS latest_event_id
+  FROM stocktaking_records r
+  LEFT JOIN materials m ON m.id = r.material_id
+  LEFT JOIN batches b ON b.id = r.batch_id
+  LEFT JOIN locations l ON l.id = r.location_id
+  LEFT JOIN inventory_positions p ON p.id = r.position_id
+`
+
+function stocktakingReadModel(row: any) {
+  return {
+    id: row.id,
+    stocktakingNo: row.stocktaking_no,
+    sheetNo: row.sheet_no,
+    materialId: row.material_id,
+    materialCode: row.material_code ?? row.material_id,
+    materialName: row.material_name ?? '已删除物料',
+    unit: row.material_unit ?? '',
+    positionId: row.position_id,
+    batchId: row.batch_id,
+    batchNo: row.batch_no,
+    locationId: row.location_id,
+    locationName: row.location_name,
+    resolutionState: row.resolution_state,
+    snapshotVersion: row.snapshot_position_version === null
+      ? null
+      : Number(row.snapshot_position_version),
+    currentPositionVersion: row.current_position_version === null
+      ? null
+      : Number(row.current_position_version),
+    systemStock: Number(row.system_stock),
+    actualStock: Number(row.actual_stock),
+    difference: Number(row.difference),
+    currentStock: row.current_stock === null ? null : Number(row.current_stock),
+    operator: row.operator,
+    status: row.status,
+    reason: row.reason,
+    remark: row.remark,
+    adjustmentEventId: row.adjustment_event_id,
+    latestEventId: row.latest_event_id,
+    cancelledAt: row.cancelled_at,
+    cancelledBy: row.cancelled_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function stocktakingEventReadModel(row: any) {
+  return {
+    id: row.id,
+    eventKind: row.event_kind,
+    parentEventId: row.parent_event_id,
+    rootEventId: row.root_event_id,
+    chainDepth: Number(row.chain_depth),
+    quantityDelta: Number(row.quantity_delta),
+    inventoryBefore: Number(row.inventory_before),
+    inventoryAfter: Number(row.inventory_after),
+    operator: row.operator,
+    reason: row.reason,
+    createdAt: row.created_at,
+  }
+}
+
 function generateNo(prefix = 'ST'): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const timestamp = Date.now().toString().slice(-6)
@@ -285,38 +371,100 @@ function handleInventoryFailure(res: any, caught: unknown): void {
 
 router.get('/', (req, res) => {
   try {
-    let { page = 1, pageSize = 20, keyword } = req.query
+    let { page = 1, pageSize = 20, keyword, status } = req.query
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
-    let where = 'is_deleted = 0'
+    let where = 'r.is_deleted = 0'
     const params: any[] = []
     if (keyword) {
-      where += ' AND stocktaking_no LIKE ?'
-      params.push(`%${keyword}%`)
+      const search = `%${String(keyword).trim()}%`
+      where += ` AND (
+        r.stocktaking_no LIKE ? OR m.code LIKE ? OR m.name LIKE ?
+        OR COALESCE(b.batch_no, '') LIKE ? OR COALESCE(l.name, '') LIKE ?
+      )`
+      params.push(search, search, search, search, search)
+    }
+    if (status !== undefined && status !== '') {
+      if (typeof status !== 'string' || !STOCKTAKING_STATUSES.has(status)) {
+        error(res, 'Stocktaking status is invalid', 'INVALID_PARAMETER', 400)
+        return
+      }
+      where += ' AND r.status = ?'
+      params.push(status)
     }
     const db = getDatabase()
-    const count = Number((db.prepare(`SELECT COUNT(*) AS total FROM stocktaking_records WHERE ${where}`).get(...params) as any)?.total || 0)
+    const count = Number((db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM stocktaking_records r
+      LEFT JOIN materials m ON m.id = r.material_id
+      LEFT JOIN batches b ON b.id = r.batch_id
+      LEFT JOIN locations l ON l.id = r.location_id
+      WHERE ${where}
+    `).get(...params) as any)?.total || 0)
     const rows = db.prepare(`
-      SELECT * FROM stocktaking_records WHERE ${where}
-      ORDER BY created_at DESC LIMIT ? OFFSET ?
+      ${STOCKTAKING_READ_SELECT}
+      WHERE ${where}
+      ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?
     `).all(...params, Number(pageSize), (Number(page) - 1) * Number(pageSize)) as any[]
-    successList(res, rows.map(row => ({
-      id: row.id,
-      stocktakingNo: row.stocktaking_no,
-      sheetNo: row.sheet_no,
-      materialId: row.material_id,
-      positionId: row.position_id,
-      batchId: row.batch_id,
-      locationId: row.location_id,
-      systemStock: row.system_stock,
-      actualStock: row.actual_stock,
-      difference: row.difference,
-      operator: row.operator,
-      status: row.status,
-      reason: row.reason,
-      remark: row.remark,
-      createdAt: row.created_at,
-    })), Number(page), Number(pageSize), count)
+    successList(res, rows.map(stocktakingReadModel), Number(page), Number(pageSize), count)
+  } catch (caught) {
+    handleInventoryFailure(res, caught)
+  }
+})
+
+router.get('/stats', (_req, res) => {
+  try {
+    const row = getDatabase().prepare(`
+      SELECT
+        SUM(CASE WHEN date(created_at, 'localtime') = date('now', 'localtime') THEN 1 ELSE 0 END) AS today_count,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status = 'adjusted' THEN 1 ELSE 0 END) AS adjusted_count,
+        SUM(CASE WHEN resolution_state = 'unresolved' OR status = 'unresolved' THEN 1 ELSE 0 END) AS unresolved_count
+      FROM stocktaking_records
+      WHERE is_deleted = 0
+    `).get() as any
+    success(res, {
+      todayCount: Number(row?.today_count) || 0,
+      pendingCount: Number(row?.pending_count) || 0,
+      adjustedCount: Number(row?.adjusted_count) || 0,
+      unresolvedCount: Number(row?.unresolved_count) || 0,
+    })
+  } catch (caught) {
+    handleInventoryFailure(res, caught)
+  }
+})
+
+router.get('/:id', (req, res) => {
+  try {
+    const db = getDatabase()
+    const row = db.prepare(`
+      ${STOCKTAKING_READ_SELECT}
+      WHERE r.id = ? AND r.is_deleted = 0
+    `).get(req.params.id) as any
+    if (!row) fail('Stocktaking record not found', 'NOT_FOUND', 404)
+    const events = db.prepare(`
+      SELECT * FROM stocktaking_adjustment_events
+      WHERE stocktaking_record_id = ?
+      ORDER BY chain_depth, created_at, id
+    `).all(row.id) as any[]
+    const explanations = db.prepare(`
+      SELECT id, adjustment_event_id, sequence, explanation, operator, created_at
+      FROM stocktaking_explanations
+      WHERE stocktaking_record_id = ?
+      ORDER BY sequence, created_at, id
+    `).all(row.id) as any[]
+    success(res, {
+      ...stocktakingReadModel(row),
+      events: events.map(stocktakingEventReadModel),
+      explanations: explanations.map(explanation => ({
+        id: explanation.id,
+        adjustmentEventId: explanation.adjustment_event_id,
+        sequence: Number(explanation.sequence),
+        explanation: explanation.explanation,
+        operator: explanation.operator,
+        createdAt: explanation.created_at,
+      })),
+    })
   } catch (caught) {
     handleInventoryFailure(res, caught)
   }

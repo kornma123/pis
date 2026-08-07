@@ -45,6 +45,7 @@ function seedRole(code: string, permissions: Record<string, 'R' | 'W'>): void {
 
 function withActor(role = 'admin', username = role) {
   return {
+    get: (path: string) => request(app).get(path).set('x-test-role', role).set('x-test-user', username),
     post: (path: string) => request(app).post(path).set('x-test-role', role).set('x-test-user', username),
     delete: (path: string) => request(app).delete(path).set('x-test-role', role).set('x-test-user', username),
   }
@@ -229,6 +230,85 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(Number(saved.difference)).toBe(0)
     expect(inventoryFacts(position.materialId)).toEqual(before)
     expect(countRows('stocktaking_adjustment_events')).toBe(0)
+  })
+
+  it('exposes a named read model, global statistics, and the append-only adjustment history', async () => {
+    const position = seedPosition(true)
+    const created = await record(position, 12, 'pending verification')
+    expect(created.status).toBe(200)
+    const recordId = created.body.data.id
+
+    const list = await withActor().get('/api/v1/stocktaking?status=pending&keyword=ST-MAT')
+    expect(list.status).toBe(200)
+    expect(list.body.data.list).toEqual([
+      expect.objectContaining({
+        id: recordId,
+        materialId: position.materialId,
+        materialCode: position.materialId,
+        materialName: position.materialId,
+        unit: 'pcs',
+        positionId: position.positionId,
+        locationId: position.locationId,
+        locationName: 'stocktaking',
+        batchId: position.batchId,
+        batchNo: position.batchId,
+        systemStock: 10,
+        actualStock: 12,
+        difference: 2,
+        currentStock: 10,
+        status: 'pending',
+      }),
+    ])
+
+    const stats = await withActor().get('/api/v1/stocktaking/stats')
+    expect(stats.status).toBe(200)
+    expect(stats.body.data).toMatchObject({
+      todayCount: 1,
+      pendingCount: 1,
+      adjustedCount: 0,
+      unresolvedCount: 0,
+    })
+
+    const adjusted = await withActor().post(`/api/v1/stocktaking/${recordId}/adjust`).send({})
+    expect(adjusted.status).toBe(200)
+    const explanation = await withActor().post(`/api/v1/stocktaking/${recordId}/explanations`).send({
+      explanation: 'first append-only note',
+    })
+    expect(explanation.status).toBe(201)
+    const reversed = await withActor().post(`/api/v1/stocktaking/${recordId}/reverse`).send({
+      eventId: adjusted.body.data.eventId,
+      reason: 'recount found the first adjustment was wrong',
+    })
+    expect(reversed.status).toBe(200)
+
+    const detail = await withActor().get(`/api/v1/stocktaking/${recordId}`)
+    expect(detail.status).toBe(200)
+    expect(detail.body.data).toMatchObject({
+      id: recordId,
+      currentStock: 10,
+      status: 'compensated',
+      latestEventId: reversed.body.data.eventId,
+    })
+    expect(detail.body.data.events).toEqual([
+      expect.objectContaining({
+        id: adjusted.body.data.eventId,
+        eventKind: 'adjustment',
+        chainDepth: 0,
+        inventoryBefore: 10,
+        inventoryAfter: 12,
+      }),
+      expect.objectContaining({
+        id: reversed.body.data.eventId,
+        eventKind: 'compensation',
+        parentEventId: adjusted.body.data.eventId,
+        chainDepth: 1,
+        inventoryBefore: 12,
+        inventoryAfter: 10,
+      }),
+    ])
+    expect(detail.body.data.explanations).toEqual([
+      expect.objectContaining({ sequence: 1, explanation: 'first append-only note', operator: 'admin' }),
+    ])
   })
 
   it('applies a batch-position surplus atomically and keeps inbound/outbound history unchanged', async () => {

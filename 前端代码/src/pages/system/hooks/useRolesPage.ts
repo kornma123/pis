@@ -28,6 +28,8 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'outbound', label: '出库（领用消耗）' },
   { key: 'transfers', label: '调拨' },
   { key: 'stocktaking', label: '盘点' },
+  { key: 'stocktaking_adjust', label: '库存调整' },
+  { key: 'stocktaking_reverse', label: '撤销库存调整' },
   { key: 'returns', label: '退库' },
   { key: 'scraps', label: '报废' },
   { key: 'materials', label: '耗材物料' },
