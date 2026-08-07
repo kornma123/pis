@@ -34,6 +34,21 @@ export interface StockConflict {
   refreshed: boolean
 }
 
+export function isSamePositionSnapshot(
+  confirmed: StocktakingPositionOption,
+  current: StocktakingPositionOption | null,
+): boolean {
+  return Boolean(
+    current
+    && current.id === confirmed.id
+    && current.materialId === confirmed.materialId
+    && current.batchId === confirmed.batchId
+    && current.locationId === confirmed.locationId
+    && current.version === confirmed.version
+    && quantityUnits(current.quantity) === quantityUnits(confirmed.quantity),
+  )
+}
+
 export const statusOptions = [
   { value: '', label: '全部状态' },
   { value: 'pending', label: '待处理' },
@@ -106,6 +121,7 @@ export function useStocktakingPage() {
   const [positionKeyword, setPositionKeyword] = useState('')
   const deferredPositionKeyword = useDeferredValue(positionKeyword)
   const [selectedPositionId, setSelectedPositionId] = useState('')
+  const [confirmedPosition, setConfirmedPosition] = useState<StocktakingPositionOption | null>(null)
   const [actualStock, setActualStock] = useState('')
   const [remark, setRemark] = useState('')
   const [adjustReason, setAdjustReason] = useState('pending')
@@ -146,7 +162,7 @@ export function useStocktakingPage() {
       pageSize: 200,
       keyword: deferredPositionKeyword || undefined,
     }),
-    enabled: modal === 'create',
+    enabled: modal === 'create' && createStep < 3,
   })
   const detailQuery = useQuery({
     queryKey: ['stocktaking', 'detail', detailId],
@@ -159,6 +175,16 @@ export function useStocktakingPage() {
     [positionsQuery.data],
   )
   const selectedPosition = positions.find(position => position.id === selectedPositionId) ?? null
+
+  useEffect(() => {
+    if (createStep !== 3 || !confirmedPosition) return
+    const current = positions.find(position => position.id === confirmedPosition.id) ?? null
+    if (isSamePositionSnapshot(confirmedPosition, current)) return
+    setConfirmedPosition(null)
+    setSelectedPositionId('')
+    setCreateStep(1)
+    toast.error('该库存位置刚刚发生了变化，请重新选择并确认后再保存')
+  }, [confirmedPosition, createStep, positions])
 
   async function refreshAll(recordId?: string) {
     await Promise.all([
@@ -183,6 +209,7 @@ export function useStocktakingPage() {
     },
     onError: async error => {
       if (apiErrorCode(error) !== 'STOCK_CHANGED') return
+      setConfirmedPosition(null)
       setSelectedPositionId('')
       setCreateStep(1)
       await queryClient.invalidateQueries({ queryKey: ['inventory', 'stocktaking-positions'] })
@@ -225,6 +252,7 @@ export function useStocktakingPage() {
   function openCreate(position?: StocktakingPositionOption, desiredActual?: number) {
     if (modal === null && document.activeElement instanceof HTMLElement) setReturnFocus(document.activeElement)
     setCreateStep(1)
+    setConfirmedPosition(null)
     setPositionKeyword(position?.materialCode ?? '')
     setSelectedPositionId(position?.id ?? '')
     setActualStock(desiredActual === undefined ? '' : formatQuantity(desiredActual))
@@ -256,17 +284,32 @@ export function useStocktakingPage() {
     setModal('flow')
   }
 
+  function changeCreateStep(step: 1 | 2 | 3) {
+    if (step === 3) {
+      if (!selectedPosition) return
+      setConfirmedPosition({ ...selectedPosition })
+    } else {
+      setConfirmedPosition(null)
+    }
+    setCreateStep(step)
+  }
+
+  function selectPosition(positionId: string) {
+    setConfirmedPosition(null)
+    setSelectedPositionId(positionId)
+  }
+
   function submitCreate() {
     const actual = parseQuantityInput(actualStock)
-    if (!selectedPosition) return toast.error('请选择库存位置')
+    if (!confirmedPosition) return toast.error('请重新确认库存位置后再保存')
     if (actual === null) return toast.error('实盘数量不能小于 0，且最多保留 4 位小数')
     createMutation.mutate({
-      materialId: selectedPosition.materialId,
-      positionId: selectedPosition.id,
-      batchId: selectedPosition.batchId,
-      locationId: selectedPosition.locationId,
-      expectedPositionVersion: selectedPosition.version,
-      expectedSystemStock: selectedPosition.quantity,
+      materialId: confirmedPosition.materialId,
+      positionId: confirmedPosition.id,
+      batchId: confirmedPosition.batchId,
+      locationId: confirmedPosition.locationId,
+      expectedPositionVersion: confirmedPosition.version,
+      expectedSystemStock: confirmedPosition.quantity,
       actualStock: actual,
       remark: remark.trim() || undefined,
     })
@@ -340,14 +383,15 @@ export function useStocktakingPage() {
     detail: detailQuery.data ?? null,
     detailLoading: detailQuery.isLoading,
     createStep,
-    setCreateStep,
+    setCreateStep: changeCreateStep,
     positions,
     positionsLoading: positionsQuery.isLoading,
     positionKeyword,
     setPositionKeyword,
     selectedPositionId,
-    setSelectedPositionId,
+    setSelectedPositionId: selectPosition,
     selectedPosition,
+    confirmedPosition,
     actualStock,
     setActualStock,
     remark,

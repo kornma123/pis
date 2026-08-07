@@ -263,6 +263,16 @@ function insertStocktakingRecord(
   return { id, status, difference }
 }
 
+function requireResolvedStocktaking(record: any): void {
+  if (record.resolution_state !== 'resolved') {
+    fail(
+      'Historical stocktaking records without an exact position are read-only',
+      'HISTORICAL_STOCKTAKING_READ_ONLY',
+      409,
+    )
+  }
+}
+
 function ensureSnapshotCurrent(db: any, record: any): void {
   assertInventoryConserved(db, record.material_id)
   const position = db.prepare(`
@@ -546,10 +556,8 @@ router.post('/:id/adjust', requireStocktakingAdjust, (req: StocktakingActorReque
     const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0')
       .get(req.params.id) as any
     if (!record) fail('Stocktaking record not found', 'NOT_FOUND', 404)
-    if (record.resolution_state === 'legacy_material') {
-      fail('Position detail is required before this adjustment can be applied', 'BATCH_DETAIL_REQUIRED', 422)
-    }
-    if (record.resolution_state !== 'resolved' || !record.position_id || !record.location_id) {
+    requireResolvedStocktaking(record)
+    if (!record.position_id || !record.location_id) {
       fail('Stocktaking evidence is not linked to an existing position', 'POSITION_UNRESOLVED', 422)
     }
     if (record.status !== 'pending') fail('Stocktaking record is not pending', 'ALREADY_ADJUSTED', 400)
@@ -607,10 +615,11 @@ router.post('/:id/explanations', requireStocktakingAdjust, (req: StocktakingActo
     if (!explanation || explanation.length > 2000) fail('Explanation is invalid', 'INVALID_PARAMETER', 400)
     const db = getDatabase()
     const record = db.prepare(`
-      SELECT id, adjustment_event_id FROM stocktaking_records
+      SELECT id, resolution_state, adjustment_event_id FROM stocktaking_records
       WHERE id = ? AND is_deleted = 0
     `).get(req.params.id) as any
     if (!record) fail('Stocktaking record not found', 'NOT_FOUND', 404)
+    requireResolvedStocktaking(record)
     if (!record.adjustment_event_id) fail('Stocktaking adjustment does not exist', 'ADJUSTMENT_NOT_FOUND', 409)
     const id = uuidv4()
     db.prepare(`
@@ -639,6 +648,7 @@ router.post('/:id/reverse', requireStocktakingReverse, (req: StocktakingActorReq
     const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0')
       .get(req.params.id) as any
     if (!record) fail('Stocktaking record not found', 'NOT_FOUND', 404)
+    requireResolvedStocktaking(record)
     const targetEventId = req.body?.eventId ?? record.adjustment_event_id
     if (typeof targetEventId !== 'string' || !targetEventId) fail('Adjustment event is required', 'ADJUSTMENT_NOT_FOUND', 409)
     const target = db.prepare(`
@@ -703,6 +713,7 @@ router.delete('/:id', requireStocktakingReverse, (req: StocktakingActorRequest, 
     const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0')
       .get(req.params.id) as any
     if (!record) fail('Stocktaking record not found', 'NOT_FOUND', 404)
+    requireResolvedStocktaking(record)
     if (record.adjustment_event_id) {
       fail('Adjusted stocktaking requires an append-only compensation', 'COMPENSATION_CHAIN_REQUIRED', 409)
     }

@@ -567,6 +567,35 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(fullFacts(position.materialId)).toEqual(before)
   })
 
+  it.each([
+    { resolutionState: 'legacy_material', status: 'completed' },
+    { resolutionState: 'unresolved', status: 'unresolved' },
+  ])('keeps historical $resolutionState records read-only across every mutation route', async ({ resolutionState, status }) => {
+    const position = seedPosition(true)
+    const id = `ST-HISTORICAL-${resolutionState}`
+    db.prepare(`
+      INSERT INTO stocktaking_records
+        (id, stocktaking_no, material_id, resolution_state, system_stock,
+         actual_stock, difference, operator, status)
+      VALUES (?, ?, ?, ?, 10, 10, 0, 'legacy-operator', ?)
+    `).run(id, id, position.materialId, resolutionState, status)
+    const before = db.prepare('SELECT * FROM stocktaking_records WHERE id = ?').get(id)
+
+    const responses = [
+      await withActor().post(`/api/v1/stocktaking/${id}/adjust`).send({ reason: 'must-not-write' }),
+      await withActor().post(`/api/v1/stocktaking/${id}/explanations`).send({ explanation: 'must-not-write' }),
+      await withActor().post(`/api/v1/stocktaking/${id}/reverse`).send({ reason: 'must-not-write' }),
+      await withActor().delete(`/api/v1/stocktaking/${id}`).send(),
+    ]
+    for (const response of responses) {
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('HISTORICAL_STOCKTAKING_READ_ONLY')
+    }
+    expect(db.prepare('SELECT * FROM stocktaking_records WHERE id = ?').get(id)).toEqual(before)
+    expect(countRows('stocktaking_adjustment_events')).toBe(0)
+    expect(countRows('stocktaking_explanations')).toBe(0)
+  })
+
   it('rejects a position changed after user confirmation before recording with zero partial writes', async () => {
     const position = seedPosition(true)
     const confirmedBody = recordBody(position, 12, 'confirmed-at-old-version')

@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { StocktakingCreateModal } from './StocktakingCreateModal'
-import type { StocktakingPositionOption } from '../hooks/useStocktakingPage'
+import {
+  isSamePositionSnapshot,
+  type StocktakingPositionOption,
+} from '../hooks/useStocktakingPage'
 
 const position: StocktakingPositionOption = {
   id: 'pos-1',
@@ -22,6 +25,7 @@ function renderModal(step: 1 | 2 | 3, overrides: Record<string, unknown> = {}) {
     open: true,
     step,
     positions: [position],
+    confirmedPosition: position,
     loading: false,
     keyword: '',
     selectedPositionId: 'pos-1',
@@ -60,5 +64,15 @@ describe('StocktakingCreateModal', () => {
     expect(screen.getByText(/保存后只记录盘点结果/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '保存盘点结果' }))
     expect(props.onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('确认页保持操作者确认的快照，不跟随后台刷新的活跃位置', () => {
+    const refreshed = { ...position, version: 4, quantity: 11 }
+    renderModal(3, { positions: [refreshed], confirmedPosition: position })
+
+    expect(screen.getByText('10 → 12 盒')).toBeInTheDocument()
+    expect(screen.queryByText('11 → 12 盒')).not.toBeInTheDocument()
+    expect(isSamePositionSnapshot(position, refreshed)).toBe(false)
+    expect(isSamePositionSnapshot(position, position)).toBe(true)
   })
 })

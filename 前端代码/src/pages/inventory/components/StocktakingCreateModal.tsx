@@ -12,6 +12,7 @@ interface Props {
   open: boolean
   step: 1 | 2 | 3
   positions: StocktakingPositionOption[]
+  confirmedPosition: StocktakingPositionOption | null
   loading: boolean
   keyword: string
   selectedPositionId: string
@@ -40,7 +41,9 @@ function deltaText(systemStock: number, actualStock: number, unit: string) {
 
 export function StocktakingCreateModal(props: Props) {
   if (!props.open) return null
-  const selected = props.positions.find(position => position.id === props.selectedPositionId) ?? null
+  const selected = props.step === 3
+    ? props.confirmedPosition
+    : props.positions.find(position => position.id === props.selectedPositionId) ?? null
   const actual = parseQuantityInput(props.actualStock)
   const delta = selected && actual !== null ? quantityUnits(actual) - quantityUnits(selected.quantity) : null
 

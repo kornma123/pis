@@ -131,7 +131,7 @@ describe('LOC-001 stocktaking two-phase contract', () => {
     expect((db.prepare('SELECT remaining FROM batches WHERE material_id = ?').get(seed.materialId) as any).remaining).toBe(100)
   })
 
-  it('refuses to reverse a legacy applied adjustment without an allocation fact', async () => {
+  it('keeps a legacy applied adjustment read-only', async () => {
     const request = (await import('supertest')).default
     const { materialId } = seedMaterial(100)
     const id = `ST-LEGACY-${seq}`
@@ -142,7 +142,7 @@ describe('LOC-001 stocktaking two-phase contract', () => {
     `).run(id, id, materialId)
     const response = await request(app).delete(`/api/v1/stocktaking/${id}`)
     expect(response.status).toBe(409)
-    expect(response.body.error.code).toBe('ALLOCATION_NOT_FOUND')
+    expect(response.body.error.code).toBe('HISTORICAL_STOCKTAKING_READ_ONLY')
     expect(stockOf(materialId)).toBe(100)
   })
 })
