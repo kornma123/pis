@@ -181,6 +181,13 @@ export function useStocktakingPage() {
       setDetailId(result.id)
       setModal('detail')
     },
+    onError: async error => {
+      if (apiErrorCode(error) !== 'STOCK_CHANGED') return
+      setSelectedPositionId('')
+      setCreateStep(1)
+      await queryClient.invalidateQueries({ queryKey: ['inventory', 'stocktaking-positions'] })
+      toast.error('该库存位置刚刚发生了变化，请重新选择并确认后再保存')
+    },
   })
   const adjustMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => stocktakingApi.adjust(id, reason),
@@ -258,6 +265,8 @@ export function useStocktakingPage() {
       positionId: selectedPosition.id,
       batchId: selectedPosition.batchId,
       locationId: selectedPosition.locationId,
+      expectedPositionVersion: selectedPosition.version,
+      expectedSystemStock: selectedPosition.quantity,
       actualStock: actual,
       remark: remark.trim() || undefined,
     })

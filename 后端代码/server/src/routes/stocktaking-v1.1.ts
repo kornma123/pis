@@ -25,13 +25,13 @@ type StocktakingActorRequest = Request & {
 }
 
 type PositionSnapshot = {
-  resolutionState: 'resolved' | 'unresolved' | 'legacy_material'
+  resolutionState: 'resolved'
   materialId: string
-  positionId: string | null
+  positionId: string
   batchId: string | null
-  locationId: string | null
+  locationId: string
   systemStock: number
-  snapshotVersion: number | null
+  snapshotVersion: number
 }
 
 type InventoryEventWrite = {
@@ -179,72 +179,48 @@ function rowIdentityMatches(row: any, body: any): boolean {
 }
 
 function loadPositionSnapshot(db: any, body: any): PositionSnapshot {
-  const material = db.prepare(`
-    SELECT id, batch_managed FROM materials WHERE id = ? AND is_deleted = 0
-  `).get(body.materialId) as any
-  if (!material) fail('Material not found', 'NOT_FOUND', 404)
-  const materialStock = assertInventoryConserved(db, body.materialId)
-  if (body.positionId !== undefined && body.positionId !== null) {
-    const position = db.prepare(`
-      SELECT id, material_id, batch_id, location_id, quantity, version
-      FROM inventory_positions WHERE id = ?
-    `).get(body.positionId) as any
-    if (!position) fail('Position not found', 'POSITION_NOT_FOUND', 404)
-    if (!rowIdentityMatches(position, body)) {
-      fail('Position identity does not match material, batch, and location', 'POSITION_IDENTITY_MISMATCH', 409)
-    }
-    return {
-      resolutionState: 'resolved',
-      materialId: position.material_id,
-      positionId: position.id,
-      batchId: position.batch_id,
-      locationId: position.location_id,
-      systemStock: parseInventoryQuantity(position.quantity, { positive: true }),
-      snapshotVersion: Number(position.version),
-    }
+  if (typeof body.positionId !== 'string' || !body.positionId.trim()) {
+    fail('An existing inventory position is required', 'POSITION_REQUIRED', 422)
   }
-
-  const hasLocation = typeof body.locationId === 'string' && body.locationId.trim().length > 0
-  const hasApplicableBatch = material.batch_managed === 1
-    ? typeof body.batchId === 'string' && body.batchId.trim().length > 0
-    : body.batchId === null || body.batchId === undefined
-  if (!hasLocation && body.batchId === undefined) {
-    return {
-      resolutionState: 'legacy_material',
-      materialId: body.materialId,
-      positionId: null,
-      batchId: null,
-      locationId: null,
-      systemStock: materialStock,
-      snapshotVersion: null,
-    }
+  if (!Number.isSafeInteger(body.expectedPositionVersion) || body.expectedPositionVersion < 0) {
+    fail('Expected position version is invalid', 'INVALID_PARAMETER', 400)
   }
-  if (hasLocation && hasApplicableBatch) {
-    const position = db.prepare(`
-      SELECT id, material_id, batch_id, location_id, quantity, version
-      FROM inventory_positions
-      WHERE material_id = ? AND batch_id IS ? AND location_id = ?
-    `).get(body.materialId, body.batchId, body.locationId) as any
-    if (position) {
-      return {
-        resolutionState: 'resolved',
-        materialId: position.material_id,
-        positionId: position.id,
-        batchId: position.batch_id,
-        locationId: position.location_id,
-        systemStock: parseInventoryQuantity(position.quantity, { positive: true }),
-        snapshotVersion: Number(position.version),
-      }
+  let expectedSystemStock: number
+  try {
+    expectedSystemStock = parseInventoryQuantity(body.expectedSystemStock)
+  } catch (caught) {
+    if (caught instanceof InventoryTransactionError) {
+      fail('Expected system stock is invalid', 'INVALID_PARAMETER', 400)
     }
+    throw caught
+  }
+  if (!db.prepare('SELECT id FROM materials WHERE id = ? AND is_deleted = 0').get(body.materialId)) {
+    fail('Material not found', 'NOT_FOUND', 404)
+  }
+  assertInventoryConserved(db, body.materialId)
+  const position = db.prepare(`
+    SELECT id, material_id, batch_id, location_id, quantity, version
+    FROM inventory_positions WHERE id = ?
+  `).get(body.positionId) as any
+  if (!position) fail('Position not found', 'POSITION_NOT_FOUND', 404)
+  if (!rowIdentityMatches(position, body)) {
+    fail('Position identity does not match material, batch, and location', 'POSITION_IDENTITY_MISMATCH', 409)
+  }
+  const systemStock = parseInventoryQuantity(position.quantity, { positive: true })
+  if (
+    Number(position.version) !== body.expectedPositionVersion
+    || inventoryQuantityDelta(systemStock, expectedSystemStock) !== 0
+  ) {
+    fail('Inventory changed before stocktaking was recorded', 'STOCK_CHANGED', 409)
   }
   return {
-    resolutionState: 'unresolved',
-    materialId: body.materialId,
-    positionId: null,
-    batchId: body.batchId ?? null,
-    locationId: hasLocation ? body.locationId : null,
-    systemStock: 0,
-    snapshotVersion: null,
+    resolutionState: 'resolved',
+    materialId: position.material_id,
+    positionId: position.id,
+    batchId: position.batch_id,
+    locationId: position.location_id,
+    systemStock,
+    snapshotVersion: Number(position.version),
   }
 }
 
@@ -255,21 +231,21 @@ function insertStocktakingRecord(
   actor: string,
   reason: string | null,
   remark: string | null,
+  sheetNo: string | null = null,
 ): { id: string; status: string; difference: number } {
   const difference = inventoryQuantityDelta(actualStock, snapshot.systemStock)
-  const status = snapshot.resolutionState === 'unresolved'
-    ? 'unresolved'
-    : difference === 0 ? 'completed' : 'pending'
+  const status = difference === 0 ? 'completed' : 'pending'
   const id = uuidv4()
   db.prepare(`
     INSERT INTO stocktaking_records
-      (id, stocktaking_no, material_id, position_id, batch_id, location_id,
+      (id, stocktaking_no, sheet_no, material_id, position_id, batch_id, location_id,
        snapshot_position_version, resolution_state, system_stock, actual_stock,
        difference, operator, status, reason, remark)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     generateNo(),
+    sheetNo,
     snapshot.materialId,
     snapshot.positionId,
     snapshot.batchId,
@@ -471,9 +447,21 @@ router.get('/:id', (req, res) => {
 })
 
 router.post('/', requireStocktakingRecord, (req: StocktakingActorRequest, res) => {
-  const { materialId, actualStock } = req.body ?? {}
+  const { materialId, positionId, locationId, expectedPositionVersion, expectedSystemStock, actualStock } = req.body ?? {}
   if (typeof materialId !== 'string' || !materialId.trim() || actualStock === undefined) {
     error(res, 'Missing fields', 'INVALID_PARAMETER', 400)
+    return
+  }
+  if (typeof positionId !== 'string' || !positionId.trim()) {
+    error(res, 'An existing inventory position is required', 'POSITION_REQUIRED', 422)
+    return
+  }
+  if (
+    typeof locationId !== 'string' || !locationId.trim()
+    || expectedPositionVersion === undefined
+    || expectedSystemStock === undefined
+  ) {
+    error(res, 'Missing position snapshot fields', 'INVALID_PARAMETER', 400)
     return
   }
   let transactionStarted = false
@@ -504,66 +492,47 @@ router.post('/', requireStocktakingRecord, (req: StocktakingActorRequest, res) =
 })
 
 router.post('/batch', requireStocktakingRecord, (req: StocktakingActorRequest, res) => {
+  const { items, remark } = req.body ?? {}
+  if (!Array.isArray(items) || items.length === 0) {
+    error(res, 'Stocktaking items cannot be empty', 'INVALID_PARAMETER', 400)
+    return
+  }
+  const db = getDatabase()
+  let transactionStarted = false
   try {
-    const { items, remark } = req.body ?? {}
-    if (!Array.isArray(items) || items.length === 0) {
-      error(res, 'Stocktaking items cannot be empty', 'INVALID_PARAMETER', 400)
-      return
-    }
-    const db = getDatabase()
     const seen = new Set<string>()
-    const plan: Array<{ materialId: string; actualStock: number; systemStock: number; remark?: string }> = []
-    for (const item of items) {
-      if (!item || typeof item !== 'object' || !item.materialId || item.actualStock === undefined || seen.has(item.materialId)) {
-        error(res, 'Invalid or duplicate stocktaking item', 'INVALID_PARAMETER', 422)
-        return
-      }
-      seen.add(item.materialId)
-      if (!db.prepare('SELECT id FROM materials WHERE id = ? AND is_deleted = 0').get(item.materialId)) {
-        error(res, 'Material not found', 'NOT_FOUND', 422)
-        return
-      }
-      const actual = parseActualStock(item.actualStock)
-      const system = assertInventoryConserved(db, item.materialId)
-      if (inventoryQuantityDelta(actual, system) !== 0) {
-        error(res, 'Position detail is required for an inventory adjustment', 'BATCH_DETAIL_REQUIRED', 422)
-        return
-      }
-      plan.push({ materialId: item.materialId, actualStock: actual, systemStock: system, remark: item.remark })
-    }
     const sheetNo = generateNo('STS')
     const ids: string[] = []
+    const actor = actorName(req)
     db.exec('BEGIN IMMEDIATE')
-    try {
-      for (const item of plan) {
-        if (inventoryQuantityDelta(assertInventoryConserved(db, item.materialId), item.systemStock) !== 0) {
-          fail('Inventory changed before stocktaking was recorded', 'STOCK_CHANGED', 409)
-        }
-        const id = uuidv4()
-        ids.push(id)
-        db.prepare(`
-          INSERT INTO stocktaking_records
-            (id, stocktaking_no, sheet_no, material_id, resolution_state,
-             system_stock, actual_stock, difference, operator, status, remark)
-          VALUES (?, ?, ?, ?, 'legacy_material', ?, ?, 0, ?, 'completed', ?)
-        `).run(
-          id,
-          generateNo(),
-          sheetNo,
-          item.materialId,
-          item.systemStock,
-          item.actualStock,
-          actorName(req),
-          optionalText(item.remark ?? remark),
-        )
+    transactionStarted = true
+    for (const item of items) {
+      if (
+        !item || typeof item !== 'object'
+        || typeof item.positionId !== 'string' || !item.positionId.trim()
+        || item.actualStock === undefined
+        || seen.has(item.positionId)
+      ) {
+        fail('Invalid, duplicate, or non-position stocktaking item', 'POSITION_REQUIRED', 422)
       }
-      db.exec('COMMIT')
-      success(res, { sheetNo, count: ids.length, ids }, 'Stocktaking batch recorded', 201)
-    } catch (caught) {
-      db.exec('ROLLBACK')
-      throw caught
+      seen.add(item.positionId)
+      const snapshot = loadPositionSnapshot(db, item)
+      const saved = insertStocktakingRecord(
+        db,
+        snapshot,
+        parseActualStock(item.actualStock),
+        actor,
+        optionalText(item.reason),
+        optionalText(item.remark ?? remark),
+        sheetNo,
+      )
+      ids.push(saved.id)
     }
+    db.exec('COMMIT')
+    transactionStarted = false
+    success(res, { sheetNo, count: ids.length, ids }, 'Stocktaking batch recorded', 201)
   } catch (caught) {
+    if (transactionStarted) db.exec('ROLLBACK')
     handleInventoryFailure(res, caught)
   }
 })

@@ -62,17 +62,26 @@ async function createPosition(request: APIRequestContext, token: string, label: 
     { headers: authorization(token) },
   )
   const inventoryBody = await inventoryResponse.json() as {
-    data?: { list?: Array<{ materialId?: string, positions?: Array<{ id?: string, batchId?: string | null }> }> }
+    data?: {
+      list?: Array<{
+        materialId?: string
+        positions?: Array<{ id?: string, batchId?: string | null, quantity?: number, version?: number }>
+      }>
+    }
   }
   expect(inventoryResponse.status(), JSON.stringify(inventoryBody)).toBe(200)
   const savedPosition = inventoryBody.data?.list
     ?.find(item => item.materialId === materialId)?.positions?.[0]
   expect(savedPosition?.id).toEqual(expect.any(String))
   expect(savedPosition?.batchId).toEqual(expect.any(String))
+  expect(savedPosition?.quantity).toBe(10)
+  expect(savedPosition?.version).toEqual(expect.any(Number))
   return {
     suffix, materialId, materialName, materialCode, locationId, locationName, batchNo,
     positionId: savedPosition!.id as string,
     batchId: savedPosition!.batchId as string,
+    quantity: savedPosition!.quantity as number,
+    version: savedPosition!.version as number,
   }
 }
 
@@ -151,6 +160,8 @@ test('refuses a stale adjustment and sends the operator back to recount', async 
       positionId: position.positionId,
       batchId: position.batchId,
       locationId: position.locationId,
+      expectedPositionVersion: position.version,
+      expectedSystemStock: position.quantity,
       actualStock: 12,
       remark: '并发冲突验收',
     },
@@ -185,4 +196,46 @@ test('refuses a stale adjustment and sends the operator back to recount', async 
   await expect(conflict).toContainText('当前库存：11')
   await conflict.getByRole('button', { name: '重新盘点' }).click()
   await expect(page.getByRole('dialog', { name: '新建盘点' })).toBeVisible()
+})
+
+test('refuses to record a position that changed after the confirmation screen', async ({ page, request }) => {
+  const token = await apiLogin(request, 'admin')
+  const position = await createPosition(request, token, 'record-conflict')
+  await loginThroughUi(page, 'admin')
+  await page.goto('/stocktaking')
+
+  await page.getByRole('button', { name: '新建盘点', exact: true }).click()
+  const createDialog = page.getByRole('dialog', { name: '新建盘点' })
+  await createDialog.getByRole('radio', { name: new RegExp(position.materialName) }).click()
+  await createDialog.getByRole('button', { name: '下一步' }).click()
+  await createDialog.getByLabel('实盘数量 *', { exact: true }).fill('12')
+  await createDialog.getByRole('button', { name: '下一步' }).click()
+  await expect(createDialog.getByText('10 → 12 盒', { exact: true })).toBeVisible()
+
+  await expectCreatedId(await request.post(`${apiBaseUrl()}/inbound`, {
+    headers: { ...authorization(token), 'Idempotency-Key': `stocktaking-record-conflict-${position.suffix}` },
+    data: {
+      type: 'direct', materialId: position.materialId, batchNo: position.batchNo,
+      quantity: 1, unit: '盒', price: 1, locationId: position.locationId,
+      expiryDate: '2028-12-31', operator: 'critical-e2e-record-conflict',
+    },
+  }), 'create concurrent inbound before record')
+
+  const staleResponse = page.waitForResponse(response =>
+    response.request().method() === 'POST' && response.url().endsWith('/api/v1/stocktaking'),
+  )
+  await createDialog.getByRole('button', { name: '保存盘点结果' }).click()
+  expect((await staleResponse).status()).toBe(409)
+  await expect(page.getByText('该库存位置刚刚发生了变化，请重新选择并确认后再保存')).toBeVisible()
+  await expect(
+    createDialog.getByRole('radio', { name: new RegExp(position.materialName) }).getByText('11 盒', { exact: true }),
+  ).toBeVisible()
+
+  const records = await request.get(
+    `${apiBaseUrl()}/stocktaking?keyword=${encodeURIComponent(position.materialCode)}&page=1&pageSize=20`,
+    { headers: authorization(token) },
+  )
+  const body = await records.json() as { data?: { pagination?: { total?: number } } }
+  expect(records.status()).toBe(200)
+  expect(body.data?.pagination?.total).toBe(0)
 })

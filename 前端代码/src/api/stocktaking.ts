@@ -87,6 +87,8 @@ export interface CreateStocktakingInput {
   positionId: string
   batchId: string | null
   locationId: string
+  expectedPositionVersion: number
+  expectedSystemStock: number
   actualStock: number
   remark?: string
 }
@@ -95,10 +97,10 @@ export interface CreateStocktakingResult {
   id: string
   status: string
   materialId: string
-  positionId: string | null
+  positionId: string
   batchId: string | null
-  locationId: string | null
-  snapshotVersion: number | null
+  locationId: string
+  snapshotVersion: number
 }
 
 const paginationSchema = z.object({

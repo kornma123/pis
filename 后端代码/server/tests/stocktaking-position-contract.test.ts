@@ -12,6 +12,7 @@ type SeededPosition = {
   batchId: string | null
   locationId: string
   quantity: number
+  version: number
 }
 
 const FAILURE_TRIGGERS = [
@@ -74,7 +75,15 @@ function seedPosition(batchManaged: boolean, quantity = 10): SeededPosition {
     INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity)
     VALUES (?, ?, ?, ?, ?)
   `).run(positionId, materialId, batchId, locationId, quantity)
-  return { materialId, positionId, batchId, locationId, quantity }
+  const saved = db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(positionId) as any
+  return {
+    materialId,
+    positionId,
+    batchId,
+    locationId,
+    quantity: Number(saved.quantity),
+    version: Number(saved.version),
+  }
 }
 
 function recordBody(position: SeededPosition, actualStock: unknown, reason?: string) {
@@ -82,6 +91,8 @@ function recordBody(position: SeededPosition, actualStock: unknown, reason?: str
     positionId: position.positionId,
     materialId: position.materialId,
     locationId: position.locationId,
+    expectedPositionVersion: position.version,
+    expectedSystemStock: position.quantity,
     actualStock,
     ...(position.batchId === null ? {} : { batchId: position.batchId }),
     ...(reason === undefined ? {} : { reason }),
@@ -90,7 +101,13 @@ function recordBody(position: SeededPosition, actualStock: unknown, reason?: str
 }
 
 async function record(position: SeededPosition, actualStock: unknown, reason?: string, role = 'admin') {
-  return withActor(role).post('/api/v1/stocktaking').send(recordBody(position, actualStock, reason))
+  const current = db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?')
+    .get(position.positionId) as any
+  return withActor(role).post('/api/v1/stocktaking').send(recordBody({
+    ...position,
+    quantity: Number(current.quantity),
+    version: Number(current.version),
+  }, actualStock, reason))
 }
 
 function inventoryFacts(materialId: string) {
@@ -526,32 +543,56 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(fullFacts(position.materialId)).toEqual(before)
   })
 
-  it('records unresolved evidence but never guesses a batch or applies a quantity change', async () => {
+  it('rejects material-only or inferred-location records without creating a second stocktaking truth', async () => {
     const position = seedPosition(true)
-    const before = inventoryFacts(position.materialId)
-    const unresolved = await withActor('admin', 'counter-a').post('/api/v1/stocktaking').send({
+    const before = fullFacts(position.materialId)
+    const materialOnly = await withActor('admin', 'counter-a').post('/api/v1/stocktaking').send({
       materialId: position.materialId,
-      locationId: position.locationId,
       actualStock: 8,
       reason: 'unknown',
     })
-    expect(unresolved.status).toBe(200)
-    expect(unresolved.body.data.status).toBe('unresolved')
-    const saved = db.prepare('SELECT * FROM stocktaking_records WHERE id = ?').get(unresolved.body.data.id) as any
-    expect(saved).toMatchObject({
-      material_id: position.materialId,
-      position_id: null,
-      batch_id: null,
-      location_id: position.locationId,
-      resolution_state: 'unresolved',
-      status: 'unresolved',
-      operator: 'counter-a',
+    expect(materialOnly.status).toBe(422)
+    expect(materialOnly.body.error.code).toBe('POSITION_REQUIRED')
+
+    const inferred = await withActor('admin', 'counter-a').post('/api/v1/stocktaking').send({
+      materialId: position.materialId,
+      batchId: position.batchId,
+      locationId: position.locationId,
+      expectedPositionVersion: position.version,
+      expectedSystemStock: position.quantity,
+      actualStock: 8,
     })
-    const adjusted = await withActor().post(`/api/v1/stocktaking/${unresolved.body.data.id}/adjust`).send({})
-    expect(adjusted.status).toBe(422)
-    expect(adjusted.body.error.code).toBe('POSITION_UNRESOLVED')
-    expect(inventoryFacts(position.materialId)).toEqual(before)
-    expect(countRows('stocktaking_adjustment_events')).toBe(0)
+    expect(inferred.status).toBe(422)
+    expect(inferred.body.error.code).toBe('POSITION_REQUIRED')
+    expect(fullFacts(position.materialId)).toEqual(before)
+  })
+
+  it('rejects a position changed after user confirmation before recording with zero partial writes', async () => {
+    const position = seedPosition(true)
+    const confirmedBody = recordBody(position, 12, 'confirmed-at-old-version')
+    const inventory = await import('../src/services/inventory-transactions.js')
+    db.exec('BEGIN IMMEDIATE')
+    const plan = inventory.planPositionAdditions(db, [{
+      materialId: position.materialId,
+      batchId: position.batchId,
+      locationId: position.locationId,
+      quantity: 1,
+      ownerLineId: 'EVENT-BETWEEN-CONFIRM-AND-RECORD',
+    }], { operationKind: 'return', ownerId: 'EVENT-BETWEEN-CONFIRM-AND-RECORD' })
+    inventory.applyInventoryPlan(db, plan)
+    inventory.replaceAllocationFacts(db, {
+      operationKind: 'return',
+      ownerId: 'EVENT-BETWEEN-CONFIRM-AND-RECORD',
+      direction: 'in',
+      allocations: plan.allocations,
+    })
+    db.exec('COMMIT')
+    const beforeRejected = fullFacts(position.materialId)
+
+    const response = await withActor().post('/api/v1/stocktaking').send(confirmedBody)
+    expect(response.status).toBe(409)
+    expect(response.body.error.code).toBe('STOCK_CHANGED')
+    expect(fullFacts(position.materialId)).toEqual(beforeRejected)
   })
 
   it('rejects a stale position snapshot after a later inventory event with zero partial stocktaking writes', async () => {

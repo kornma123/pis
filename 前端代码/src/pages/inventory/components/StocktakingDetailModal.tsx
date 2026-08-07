@@ -45,7 +45,9 @@ export function StocktakingDetailModal(props: Props) {
   if (!props.open) return null
   const row = props.row
   const status = getStocktakingStatusDisplay(row?.status ?? '')
-  const canExplain = Boolean(row && ['adjusted', 'compensated'].includes(row.status) && row.adjustmentEventId)
+  const canExplain = Boolean(
+    props.canAdjust && row && ['adjusted', 'compensated'].includes(row.status) && row.adjustmentEventId,
+  )
 
   return (
     <StocktakingDialog title={row ? `盘点详情 · ${row.stocktakingNo}` : '盘点详情'} onClose={props.onClose} returnFocus={props.returnFocus} size="lg">
