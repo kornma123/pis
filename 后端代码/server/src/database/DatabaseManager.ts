@@ -1072,7 +1072,7 @@ function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS inventory_transaction_allocations (
       id TEXT PRIMARY KEY,
       operation_kind TEXT NOT NULL
-        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return', 'transfer')),
+        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return', 'transfer', 'stocktaking')),
       owner_id TEXT NOT NULL,
       owner_line_id TEXT,
       material_id TEXT NOT NULL,
@@ -1084,6 +1084,31 @@ function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+}
+
+function ensureStocktakingAllocationKind(database: DatabaseSync): void {
+  const schema = database.prepare(`
+    SELECT sql FROM sqlite_master
+    WHERE type = 'table' AND name = 'inventory_transaction_allocations'
+  `).get() as { sql?: string } | undefined
+  if (!schema?.sql || schema.sql.includes("'stocktaking'")) return
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    database.exec('ALTER TABLE inventory_transaction_allocations RENAME TO inventory_transaction_allocations_pre_w1')
+    createCanonicalInventoryAllocationTable(database)
+    database.exec(`
+      INSERT INTO inventory_transaction_allocations
+        (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity, source_allocation_id, created_at)
+      SELECT id, operation_kind, owner_id, owner_line_id, material_id, batch_id, location_id, direction, quantity, source_allocation_id, created_at
+      FROM inventory_transaction_allocations_pre_w1
+    `)
+    database.exec('DROP TABLE inventory_transaction_allocations_pre_w1')
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
 }
 
 /**
@@ -1117,6 +1142,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
       batch_id TEXT,
       location_id TEXT NOT NULL,
       quantity DECIMAL(18, 4) NOT NULL CHECK (${INVENTORY_POSITION_QUANTITY_CHECK}),
+      version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1149,6 +1175,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
       positions INTEGER NOT NULL
     );
   `)
+  ensureDatabaseColumn(database, 'inventory_positions', 'version', 'INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0)')
 
   const allocationColumns = tableColumns(database, 'inventory_transaction_allocations')
   if (allocationColumns.size === 0) {
@@ -1165,6 +1192,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
     database.exec('DROP TABLE inventory_transaction_allocations')
     createCanonicalInventoryAllocationTable(database)
   }
+  ensureStocktakingAllocationKind(database)
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner
@@ -3696,7 +3724,93 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS operation_logs (id TEXT PRIMARY KEY, user_id TEXT, username TEXT, operation TEXT NOT NULL, description TEXT NOT NULL, request_data TEXT, response_data TEXT, ip TEXT, user_agent TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS stocktaking_records (id TEXT PRIMARY KEY, stocktaking_no TEXT NOT NULL UNIQUE, sheet_no TEXT, material_id TEXT NOT NULL, system_stock DECIMAL(18, 4) NOT NULL, actual_stock DECIMAL(18, 4) NOT NULL, difference DECIMAL(18, 4) NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
+    CREATE TABLE IF NOT EXISTS stocktaking_records (
+      id TEXT PRIMARY KEY,
+      stocktaking_no TEXT NOT NULL UNIQUE,
+      sheet_no TEXT,
+      material_id TEXT NOT NULL,
+      position_id TEXT,
+      batch_id TEXT,
+      location_id TEXT,
+      snapshot_position_version INTEGER,
+      resolution_state TEXT NOT NULL DEFAULT 'legacy',
+      system_stock DECIMAL(18, 4) NOT NULL,
+      actual_stock DECIMAL(18, 4) NOT NULL,
+      difference DECIMAL(18, 4) NOT NULL,
+      operator TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'completed',
+      reason TEXT,
+      remark TEXT,
+      adjustment_event_id TEXT,
+      cancelled_at DATETIME,
+      cancelled_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_deleted INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  ensureDatabaseColumn(database, 'stocktaking_records', 'position_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'batch_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'location_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'snapshot_position_version', 'INTEGER')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'resolution_state', "TEXT NOT NULL DEFAULT 'legacy'")
+  ensureDatabaseColumn(database, 'stocktaking_records', 'reason', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'adjustment_event_id', 'TEXT')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'cancelled_at', 'DATETIME')
+  ensureDatabaseColumn(database, 'stocktaking_records', 'cancelled_by', 'TEXT')
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_position
+      ON stocktaking_records(position_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS stocktaking_adjustment_events (
+      id TEXT PRIMARY KEY,
+      stocktaking_record_id TEXT NOT NULL,
+      event_kind TEXT NOT NULL CHECK (event_kind IN ('adjustment', 'compensation')),
+      parent_event_id TEXT,
+      root_event_id TEXT NOT NULL,
+      chain_depth INTEGER NOT NULL CHECK (chain_depth >= 0),
+      material_id TEXT NOT NULL,
+      position_id TEXT NOT NULL,
+      batch_id TEXT,
+      location_id TEXT NOT NULL,
+      quantity_delta DECIMAL(18, 4) NOT NULL CHECK (
+        typeof(quantity_delta) IN ('integer', 'real')
+        AND quantity_delta <> 0
+        AND abs(quantity_delta) <= 900719925474.0991
+        AND abs(quantity_delta * 10000 - round(quantity_delta * 10000)) < 0.000001
+      ),
+      batch_quantity_delta DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK (
+        typeof(batch_quantity_delta) IN ('integer', 'real')
+        AND abs(batch_quantity_delta) <= 900719925474.0991
+        AND abs(batch_quantity_delta * 10000 - round(batch_quantity_delta * 10000)) < 0.000001
+      ),
+      inventory_before DECIMAL(18, 4) NOT NULL,
+      inventory_after DECIMAL(18, 4) NOT NULL,
+      operator TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_one_adjustment
+      ON stocktaking_adjustment_events(stocktaking_record_id)
+      WHERE event_kind = 'adjustment';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_one_compensation_per_event
+      ON stocktaking_adjustment_events(parent_event_id)
+      WHERE parent_event_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_event_chain
+      ON stocktaking_adjustment_events(root_event_id, chain_depth);
+
+    CREATE TABLE IF NOT EXISTS stocktaking_explanations (
+      id TEXT PRIMARY KEY,
+      stocktaking_record_id TEXT NOT NULL,
+      adjustment_event_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL CHECK (sequence > 0),
+      explanation TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+      operator TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_stocktaking_explanations_record
+      ON stocktaking_explanations(stocktaking_record_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stocktaking_explanations_sequence
+      ON stocktaking_explanations(stocktaking_record_id, sequence);
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS return_records (id TEXT PRIMARY KEY, return_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, batch_id TEXT, quantity DECIMAL(18, 4) NOT NULL, reason TEXT NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)

@@ -21,7 +21,10 @@ let app: any
 let db: any
 const tokens: Record<string, string> = {}
 
-const MODULES_UNDER_TEST = ['users', 'roles', 'returns', 'scraps', 'transfers', 'stocktaking'] as const
+const MODULES_UNDER_TEST = [
+  'users', 'roles', 'returns', 'scraps', 'transfers',
+  'stocktaking', 'stocktaking_adjust', 'stocktaking_reverse',
+] as const
 
 async function login(username: string, password: string): Promise<string> {
   const request = (await import('supertest')).default
@@ -66,11 +69,13 @@ beforeAll(async () => {
   const transferRoutes = (await import('../src/routes/transfers-v1.1.js')).default
   const stocktakingRoutes = (await import('../src/routes/stocktaking-v1.1.js')).default
 
-  // 合成 reader（六模块 R-only）+ writer（六模块 W）
+  // 合成 reader（全部受测模块 R-only）+ writer（全部受测模块 W）。
   const readerPerms = Object.fromEntries(MODULES_UNDER_TEST.map((m) => [m, 'R'])) as Record<string, 'R' | 'W'>
   const writerPerms = Object.fromEntries(MODULES_UNDER_TEST.map((m) => [m, 'W'])) as Record<string, 'R' | 'W'>
   seedRoleUser('rbac_e_reader', readerPerms, 'e_reader')
   seedRoleUser('rbac_e_writer', writerPerms, 'e_writer')
+  // 盘点记录权限不能隐含盘点调整或冲销权限。
+  seedRoleUser('rbac_e_stocktaking_capture', { stocktaking: 'W' }, 'e_stocktaking_capture')
 
   // 镜像 app.ts 挂载：挂载层仅要求模块 R（写权限本应由路由内 W 守卫兜住）
   app = await buildTestApp([
@@ -85,6 +90,7 @@ beforeAll(async () => {
 
   tokens.reader = await login('e_reader', 'CoreOne2026!')
   tokens.writer = await login('e_writer', 'CoreOne2026!')
+  tokens.stocktakingCapture = await login('e_stocktaking_capture', 'CoreOne2026!')
 })
 
 // 每个写端点：{ method, path }。DELETE 用不存在 id（守卫在业务查找前跑，reader 应 403 而非 404）。
@@ -103,6 +109,8 @@ const WRITE_ENDPOINTS: Array<{ label: string; method: 'POST' | 'DELETE'; path: s
   { label: 'DELETE /transfers/:id', method: 'DELETE', path: '/api/v1/transfers/nonexistent' },
   { label: 'POST /stocktaking (盘点登记)', method: 'POST', path: '/api/v1/stocktaking' },
   { label: 'POST /stocktaking/:id/adjust (入账改库存·副作用最强)', method: 'POST', path: '/api/v1/stocktaking/nonexistent/adjust' },
+  { label: 'POST /stocktaking/:id/explanations (追加说明)', method: 'POST', path: '/api/v1/stocktaking/nonexistent/explanations' },
+  { label: 'POST /stocktaking/:id/reverse (反向补偿)', method: 'POST', path: '/api/v1/stocktaking/nonexistent/reverse' },
   { label: 'POST /stocktaking/batch (批量入账)', method: 'POST', path: '/api/v1/stocktaking/batch' },
   { label: 'DELETE /stocktaking/:id', method: 'DELETE', path: '/api/v1/stocktaking/nonexistent' },
 ]
@@ -123,6 +131,16 @@ describe('RBAC-E：writer(W) 同端点 ≠403（守卫放行，写体校验另�
       expect(res.status).not.toBe(403)
     })
   }
+})
+
+describe('RBAC-E：盘点记录、调整、冲销权限彼此独立', () => {
+  it('只有 stocktaking:W 时可登记，但调整、追加说明、冲销和已调整删除均为 403', async () => {
+    expect((await POST('/api/v1/stocktaking', tokens.stocktakingCapture)).status).not.toBe(403)
+    expect((await POST('/api/v1/stocktaking/nonexistent/adjust', tokens.stocktakingCapture)).status).toBe(403)
+    expect((await POST('/api/v1/stocktaking/nonexistent/explanations', tokens.stocktakingCapture)).status).toBe(403)
+    expect((await POST('/api/v1/stocktaking/nonexistent/reverse', tokens.stocktakingCapture)).status).toBe(403)
+    expect((await DEL('/api/v1/stocktaking/nonexistent', tokens.stocktakingCapture)).status).toBe(403)
+  })
 })
 
 // PUT 端点（roles/:id、users/:id）单列：reader 403 / writer ≠403
