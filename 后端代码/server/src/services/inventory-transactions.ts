@@ -97,7 +97,6 @@ export type ExactPositionDeltaInput = {
   batchQuantityDelta?: unknown
   ownerLineId?: string | null
   sourceAllocationId?: string | null
-  recreatedPositionVersion?: number
 }
 
 type MaterialState = {
@@ -719,9 +718,13 @@ export function planExactPositionDelta(db: any, input: ExactPositionDeltaInput):
     if (quantityDeltaUnits < 0) {
       throw new InventoryTransactionError('Position is unavailable', 'POSITION_NOT_FOUND', 409)
     }
-    const recreatedVersion = input.recreatedPositionVersion ?? 0
+    const tombstone = db.prepare(`
+      SELECT deleted_version FROM inventory_position_tombstones WHERE position_id = ?
+    `).get(input.positionId) as { deleted_version: unknown } | undefined
+    const deletedVersion = tombstone ? Number(tombstone.deleted_version) : -1
+    const recreatedVersion = deletedVersion + 1
     if (!Number.isSafeInteger(recreatedVersion) || recreatedVersion < 0) {
-      corrupt('recreated position version is invalid')
+      corrupt('recreated position tombstone is invalid')
     }
     position = {
       id: input.positionId,

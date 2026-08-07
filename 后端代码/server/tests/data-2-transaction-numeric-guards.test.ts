@@ -97,6 +97,7 @@ beforeEach(() => {
     DELETE FROM outbound_records;
     DELETE FROM inbound_records;
     DELETE FROM inventory_positions;
+    DELETE FROM inventory_position_tombstones;
     DELETE FROM batches;
     DELETE FROM inventory;
     DELETE FROM materials;

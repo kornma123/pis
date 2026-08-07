@@ -187,6 +187,7 @@ beforeEach(() => {
     DELETE FROM material_categories;
     DELETE FROM locations;
   `)
+  clearOptionalTable('inventory_position_tombstones')
   db.prepare("INSERT INTO material_categories (id, code, name, level) VALUES ('ST-CAT', 'ST-CAT', 'stocktaking', 1)").run()
   db.prepare(`
     INSERT INTO locations (id, code, name, type, zone, capacity, status)
@@ -525,6 +526,91 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
     expect(fullFacts(position.materialId)).toEqual(beforeRejected)
   })
 
+  it('rejects a v3 snapshot after ordinary business reaches v5 before compensation deletes and recreates the position', async () => {
+    const position = seedPosition(true)
+    const inventory = await import('../src/services/inventory-transactions.js')
+    const applyBusinessPlan = (
+      plan: any,
+      operationKind: 'outbound' | 'return',
+      ownerId: string,
+      direction: 'out' | 'in',
+    ) => {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        inventory.applyInventoryPlan(db, plan)
+        inventory.replaceAllocationFacts(db, {
+          operationKind,
+          ownerId,
+          direction,
+          allocations: plan.allocations,
+        })
+        db.exec('COMMIT')
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    }
+
+    const original = await record(position, 20, 'original_count')
+    const adjusted = await withActor().post(`/api/v1/stocktaking/${original.body.data.id}/adjust`).send({})
+    expect(adjusted.status).toBe(200)
+    expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 20, version: 1 })
+
+    for (const [index, quantity] of [5, 5].entries()) {
+      const ownerId = `INTERLEAVED-OUT-${index + 1}`
+      const plan = inventory.planInventoryDeductions(db, [{
+        materialId: position.materialId,
+        quantity,
+        ownerLineId: ownerId,
+      }])
+      applyBusinessPlan(plan, 'outbound', ownerId, 'out')
+    }
+    expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10, version: 3 })
+    const oldSnapshot = await record(position, 9, 'old_v3_snapshot')
+    expect(oldSnapshot.status).toBe(200)
+
+    const addPlan = inventory.planPositionAdditions(db, [{
+      materialId: position.materialId,
+      batchId: position.batchId,
+      locationId: position.locationId,
+      quantity: 1,
+      ownerLineId: 'INTERLEAVED-RETURN',
+    }], { operationKind: 'return', ownerId: 'INTERLEAVED-RETURN' })
+    applyBusinessPlan(addPlan, 'return', 'INTERLEAVED-RETURN', 'in')
+    const deductPlan = inventory.planInventoryDeductions(db, [{
+      materialId: position.materialId,
+      quantity: 1,
+      ownerLineId: 'INTERLEAVED-OUT-3',
+    }])
+    applyBusinessPlan(deductPlan, 'outbound', 'INTERLEAVED-OUT-3', 'out')
+    expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10, version: 5 })
+
+    const deleted = await withActor().post(`/api/v1/stocktaking/${original.body.data.id}/reverse`).send({
+      eventId: adjusted.body.data.eventId,
+      reason: 'reverse original adjustment after ordinary business',
+    })
+    expect(deleted.status).toBe(200)
+    expect(db.prepare('SELECT id FROM inventory_positions WHERE id = ?').get(position.positionId)).toBeUndefined()
+    const recreated = await withActor().post(`/api/v1/stocktaking/${original.body.data.id}/reverse`).send({
+      eventId: deleted.body.data.eventId,
+      reason: 'compensate the compensation',
+    })
+    expect(recreated.status).toBe(200)
+    expect(db.prepare('SELECT quantity FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10 })
+
+    const beforeRejected = fullFacts(position.materialId)
+    const stale = await withActor().post(`/api/v1/stocktaking/${oldSnapshot.body.data.id}/adjust`).send({})
+    expect(stale.status).toBe(409)
+    expect(stale.body.error.code).toBe('STOCK_CHANGED')
+    expect(db.prepare('SELECT quantity, version FROM inventory_positions WHERE id = ?').get(position.positionId))
+      .toEqual({ quantity: 10, version: 7 })
+    expect(fullFacts(position.materialId)).toEqual(beforeRejected)
+  })
+
   it('enforces separately configurable record, adjust, and reversal permissions', async () => {
     const position = seedPosition(true)
     const deniedRecord = await record(position, 12, 'unknown', 'adjust-only')
@@ -637,6 +723,133 @@ describe('PIS-W1 existing-position stocktaking contract', () => {
           (id, operation_kind, owner_id, material_id, location_id, direction, quantity)
         VALUES ('W1-ALLOC', 'stocktaking', 'W1-OWNER', 'W1-MAT', 'W1-LOC', 'in', 1)
       `).run()).not.toThrow()
+    } finally {
+      legacy.close()
+    }
+  })
+
+  it('creates durable position tombstones on fresh schema without storing a second quantity truth', () => {
+    expect(tableExists('inventory_position_tombstones')).toBe(true)
+    expect(db.prepare(`
+      SELECT name FROM pragma_table_info('inventory_position_tombstones') ORDER BY cid
+    `).all()).toEqual([
+      { name: 'position_id' },
+      { name: 'deleted_version' },
+      { name: 'deleted_at' },
+    ])
+    const position = seedPosition(false)
+    expect(db.prepare(`
+      SELECT * FROM inventory_position_tombstones WHERE position_id = ?
+    `).get(position.positionId)).toBeUndefined()
+    db.prepare('DELETE FROM inventory_positions WHERE id = ?').run(position.positionId)
+    expect(db.prepare(`
+      SELECT position_id, deleted_version FROM inventory_position_tombstones WHERE position_id = ?
+    `).get(position.positionId)).toEqual({ position_id: position.positionId, deleted_version: 1 })
+    expect(() => db.prepare(`
+      INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity, version)
+      VALUES (?, ?, NULL, ?, 10, 1)
+    `).run(position.positionId, position.materialId, position.locationId))
+      .toThrow(/INVENTORY_POSITION_VERSION_NOT_MONOTONIC/)
+    expect(() => db.prepare(`
+      INSERT INTO inventory_positions (id, material_id, batch_id, location_id, quantity, version)
+      VALUES (?, ?, NULL, ?, 10, 2)
+    `).run(position.positionId, position.materialId, position.locationId)).not.toThrow()
+  })
+
+  it('upgrades a synthetic legacy position schema idempotently while preserving foreign keys', async () => {
+    const { DatabaseSync } = await import('node:sqlite')
+    const { ensureInventoryPositionTombstoneSchema } = await import('../src/database/DatabaseManager.js')
+    const legacy = new DatabaseSync(':memory:')
+    try {
+      legacy.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE inventory_positions (
+          id TEXT PRIMARY KEY,
+          material_id TEXT NOT NULL,
+          batch_id TEXT,
+          location_id TEXT NOT NULL,
+          quantity REAL NOT NULL CHECK (quantity > 0),
+          version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0)
+        );
+        CREATE TABLE position_refs (
+          id TEXT PRIMARY KEY,
+          position_id TEXT NOT NULL REFERENCES inventory_positions(id)
+        );
+        INSERT INTO inventory_positions
+          (id, material_id, batch_id, location_id, quantity, version)
+        VALUES ('LEGACY-POS', 'LEGACY-MAT', NULL, 'LEGACY-LOC', 10, 4);
+        INSERT INTO position_refs (id, position_id) VALUES ('LEGACY-REF', 'LEGACY-POS');
+      `)
+      ensureInventoryPositionTombstoneSchema(legacy)
+      const firstSchema = legacy.prepare(`
+        SELECT type, name, sql FROM sqlite_master
+        WHERE name = 'inventory_position_tombstones'
+           OR name LIKE 'trg_inventory_position_tombstone_%'
+        ORDER BY type, name
+      `).all()
+      ensureInventoryPositionTombstoneSchema(legacy)
+      expect(legacy.prepare(`
+        SELECT type, name, sql FROM sqlite_master
+        WHERE name = 'inventory_position_tombstones'
+           OR name LIKE 'trg_inventory_position_tombstone_%'
+        ORDER BY type, name
+      `).all()).toEqual(firstSchema)
+      expect(firstSchema).toHaveLength(5)
+      expect(legacy.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
+      expect(legacy.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      expect(legacy.prepare("SELECT * FROM position_refs WHERE id = 'LEGACY-REF'").get())
+        .toEqual({ id: 'LEGACY-REF', position_id: 'LEGACY-POS' })
+      expect(legacy.prepare(`
+        SELECT * FROM inventory_position_tombstones WHERE position_id = 'LEGACY-POS'
+      `).get()).toBeUndefined()
+      legacy.exec("DELETE FROM position_refs WHERE id = 'LEGACY-REF'; DELETE FROM inventory_positions WHERE id = 'LEGACY-POS';")
+      expect(legacy.prepare(`
+        SELECT position_id, deleted_version FROM inventory_position_tombstones
+        WHERE position_id = 'LEGACY-POS'
+      `).get()).toEqual({ position_id: 'LEGACY-POS', deleted_version: 5 })
+      expect(() => legacy.prepare(`
+        INSERT INTO inventory_positions
+          (id, material_id, batch_id, location_id, quantity, version)
+        VALUES ('LEGACY-POS', 'LEGACY-MAT', NULL, 'LEGACY-LOC', 10, 6)
+      `).run()).not.toThrow()
+    } finally {
+      legacy.close()
+    }
+  })
+
+  it('rolls back a failed tombstone migration, repins foreign keys, and remains retryable', async () => {
+    const { DatabaseSync } = await import('node:sqlite')
+    const { ensureInventoryPositionTombstoneSchema } = await import('../src/database/DatabaseManager.js')
+    const legacy = new DatabaseSync(':memory:')
+    try {
+      legacy.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE inventory_positions (
+          id TEXT PRIMARY KEY,
+          material_id TEXT NOT NULL,
+          batch_id TEXT,
+          location_id TEXT NOT NULL,
+          quantity REAL NOT NULL CHECK (quantity > 0),
+          version INTEGER NOT NULL CHECK (version >= 0)
+        );
+        INSERT INTO inventory_positions
+          (id, material_id, batch_id, location_id, quantity, version)
+        VALUES ('UNSAFE-POS', 'LEGACY-MAT', NULL, 'LEGACY-LOC', 10, 9007199254740992);
+      `)
+      expect(() => ensureInventoryPositionTombstoneSchema(legacy))
+        .toThrow(/INVENTORY_POSITION_TOMBSTONE_SCHEMA_UPGRADE_FAILED: position UNSAFE-POS has an unsafe version/)
+      expect(legacy.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE name = 'inventory_position_tombstones'
+           OR name LIKE 'trg_inventory_position_tombstone_%'
+      `).all()).toEqual([])
+      expect(legacy.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
+      expect(legacy.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      legacy.prepare("UPDATE inventory_positions SET version = 4 WHERE id = 'UNSAFE-POS'").run()
+      expect(() => ensureInventoryPositionTombstoneSchema(legacy)).not.toThrow()
+      expect(legacy.prepare(`
+        SELECT name FROM sqlite_master WHERE name = 'inventory_position_tombstones'
+      `).get()).toEqual({ name: 'inventory_position_tombstones' })
     } finally {
       legacy.close()
     }

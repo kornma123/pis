@@ -1086,6 +1086,107 @@ function createCanonicalInventoryAllocationTable(database: DatabaseSync): void {
   `)
 }
 
+const MAX_POSITION_VERSION = 9007199254740991
+const MAX_DELETABLE_POSITION_VERSION = MAX_POSITION_VERSION - 2
+
+/**
+ * Durable deletion generation only; this table deliberately stores no quantity.
+ * A delete consumes one generation and recreating the same id consumes another,
+ * so a stale snapshot can never become current again after an ABA cycle.
+ */
+export function ensureInventoryPositionTombstoneSchema(database: DatabaseSync): void {
+  let upgradeError: Error | null = null
+  let transactionStarted = false
+  try {
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS inventory_position_tombstones (
+        position_id TEXT PRIMARY KEY,
+        deleted_version INTEGER NOT NULL
+          CHECK (
+            typeof(deleted_version) = 'integer'
+            AND deleted_version >= 1
+            AND deleted_version <= ${MAX_POSITION_VERSION - 1}
+          ),
+        deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    const invalidPosition = database.prepare(`
+      SELECT id FROM inventory_positions
+      WHERE typeof(version) <> 'integer'
+        OR version < 0
+        OR version > ${MAX_POSITION_VERSION}
+      LIMIT 1
+    `).get() as { id: string } | undefined
+    if (invalidPosition) throw new Error(`position ${invalidPosition.id} has an unsafe version`)
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_insert_guard
+      BEFORE INSERT ON inventory_positions
+      WHEN typeof(NEW.version) <> 'integer'
+        OR NEW.version < 0
+        OR NEW.version > ${MAX_POSITION_VERSION}
+        OR EXISTS (
+          SELECT 1 FROM inventory_position_tombstones t
+          WHERE t.position_id = NEW.id AND NEW.version <= t.deleted_version
+        )
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_version_update_guard
+      BEFORE UPDATE OF version ON inventory_positions
+      WHEN typeof(NEW.version) <> 'integer'
+        OR NEW.version <> OLD.version + 1
+        OR NEW.version > ${MAX_POSITION_VERSION}
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_delete_guard
+      BEFORE DELETE ON inventory_positions
+      WHEN typeof(OLD.version) <> 'integer'
+        OR OLD.version < 0
+        OR OLD.version > ${MAX_DELETABLE_POSITION_VERSION}
+        OR EXISTS (
+          SELECT 1 FROM inventory_position_tombstones t
+          WHERE t.position_id = OLD.id AND t.deleted_version >= OLD.version + 1
+        )
+      BEGIN
+        SELECT RAISE(ABORT, 'INVENTORY_POSITION_VERSION_NOT_MONOTONIC');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_inventory_position_tombstone_after_delete
+      AFTER DELETE ON inventory_positions
+      BEGIN
+        INSERT INTO inventory_position_tombstones (position_id, deleted_version, deleted_at)
+        VALUES (OLD.id, OLD.version + 1, CURRENT_TIMESTAMP)
+        ON CONFLICT(position_id) DO UPDATE SET
+          deleted_version = excluded.deleted_version,
+          deleted_at = excluded.deleted_at;
+      END;
+    `)
+    database.exec('COMMIT')
+    transactionStarted = false
+  } catch (caught) {
+    const detail = caught instanceof Error ? caught.message : String(caught)
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+        transactionStarted = false
+      } catch (rollbackError) {
+        const rollbackDetail = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        upgradeError = new Error(
+          `INVENTORY_POSITION_TOMBSTONE_SCHEMA_UPGRADE_FAILED: ${detail}; rollback failed: ${rollbackDetail}`,
+        )
+      }
+    }
+    upgradeError ??= new Error(`INVENTORY_POSITION_TOMBSTONE_SCHEMA_UPGRADE_FAILED: ${detail}`)
+  }
+  repinForeignKeysAfterMigration(database, 'inventory-position-tombstone-upgrade', upgradeError)
+  if (upgradeError) throw upgradeError
+}
+
 function ensureStocktakingAllocationKind(database: DatabaseSync): void {
   const schema = database.prepare(`
     SELECT sql FROM sqlite_master
@@ -1193,6 +1294,7 @@ export function ensureInventoryPositionSchema(database: DatabaseSync): void {
     createCanonicalInventoryAllocationTable(database)
   }
   ensureStocktakingAllocationKind(database)
+  ensureInventoryPositionTombstoneSchema(database)
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner

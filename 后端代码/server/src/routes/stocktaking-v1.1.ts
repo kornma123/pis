@@ -86,21 +86,6 @@ function parseActualStock(value: unknown): number {
   }
 }
 
-function nextRecreatedPositionVersion(db: any, positionId: string): number {
-  const row = db.prepare(`
-    SELECT MAX(r.snapshot_position_version + e.chain_depth + 1) AS latest_version
-    FROM stocktaking_adjustment_events e
-    JOIN stocktaking_records r ON r.id = e.stocktaking_record_id
-    WHERE e.position_id = ? AND r.snapshot_position_version IS NOT NULL
-  `).get(positionId) as { latest_version: number | null }
-  if (row.latest_version === null) return 0
-  const next = Number(row.latest_version) + 1
-  if (!Number.isSafeInteger(next) || next < 0) {
-    fail('Position version history is invalid', 'INVENTORY_LEDGER_CORRUPT', 409)
-  }
-  return next
-}
-
 function rowIdentityMatches(row: any, body: any): boolean {
   return row.material_id === body.materialId
     && row.batch_id === (body.batchId ?? null)
@@ -566,7 +551,6 @@ router.post('/:id/reverse', requireStocktakingReverse, (req: StocktakingActorReq
       batchQuantityDelta,
       ownerLineId: record.id,
       sourceAllocationId: sourceAllocation.id,
-      recreatedPositionVersion: nextRecreatedPositionVersion(db, target.position_id),
     })
     persistInventoryEvent(db, {
       eventId,
